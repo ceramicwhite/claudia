@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { Calendar, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -194,19 +194,6 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
     setIsOpen(false);
   };
 
-  const SelectButton: React.FC<{
-    onClick: () => void;
-    children: React.ReactNode;
-  }> = ({ onClick, children }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex items-center justify-between px-3 py-2 text-sm bg-background border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
-    >
-      <span>{children}</span>
-      <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-    </button>
-  );
 
   const DropdownMenu: React.FC<{
     items: Array<{ value: number | string; label: string }>;
@@ -214,41 +201,70 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
     onSelect: (value: number | string) => void;
   }> = ({ items, selectedValue, onSelect }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    
+    // Close on click outside
+    useEffect(() => {
+      if (!isOpen) return;
+      
+      const handleClickOutside = (event: MouseEvent) => {
+        if (
+          dropdownRef.current &&
+          buttonRef.current &&
+          !dropdownRef.current.contains(event.target as Node) &&
+          !buttonRef.current.contains(event.target as Node)
+        ) {
+          setIsOpen(false);
+        }
+      };
+      
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [isOpen]);
     
     return (
-      <Popover
-        trigger={
-          <SelectButton onClick={() => {}}>
-            {items.find(item => item.value === selectedValue)?.label || selectedValue}
-          </SelectButton>
-        }
-        content={
+      <div className="relative">
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full flex items-center justify-between px-3 py-2 text-sm bg-background border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
+        >
+          <span>{items.find(item => item.value === selectedValue)?.label || selectedValue}</span>
+          <ChevronDown className={cn("ml-2 h-4 w-4 opacity-50 transition-transform", isOpen && "rotate-180")} />
+        </button>
+        
+        {isOpen && (
           <div 
-            className="w-full bg-popover p-1 rounded-md shadow-md border border-border"
+            ref={dropdownRef}
+            className="absolute z-[100] w-full mt-1 bg-popover rounded-md shadow-lg border border-border animate-in fade-in-0 zoom-in-95"
+            style={{
+              maxHeight: 'min(300px, calc(100vh - 200px))',
+              overflowY: 'auto'
+            }}
           >
-            {items.map(item => (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => {
-                  onSelect(item.value);
-                  setIsOpen(false);
-                }}
-                className={cn(
-                  "w-full px-3 py-1.5 text-sm text-left rounded-sm hover:bg-accent hover:text-accent-foreground",
-                  selectedValue === item.value && "bg-accent text-accent-foreground"
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
+            <div className="p-1">
+              {items.map(item => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => {
+                    onSelect(item.value);
+                    setIsOpen(false);
+                  }}
+                  className={cn(
+                    "w-full px-3 py-1.5 text-sm text-left rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors",
+                    selectedValue === item.value && "bg-accent text-accent-foreground"
+                  )}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
-        }
-        open={isOpen}
-        onOpenChange={setIsOpen}
-        align="start"
-        className="w-full p-0"
-      />
+        )}
+      </div>
     );
   };
 
@@ -268,8 +284,8 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   );
 
   const popoverContent = (
-    <div className="w-[320px] space-y-4 bg-background border border-border rounded-lg shadow-lg p-4">
-      <div className="space-y-3">
+    <div className="w-[320px] space-y-4 bg-background border border-border rounded-lg shadow-lg p-4 overflow-visible">
+      <div className="space-y-3 overflow-visible">
         <Label className="text-sm font-medium text-foreground">
           Select Date & Time
         </Label>
@@ -356,7 +372,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
       content={popoverContent}
       open={isOpen}
       onOpenChange={setIsOpen}
-      className="w-auto p-0"
+      className="w-auto p-0 z-50"
       align="start"
     />
   );
