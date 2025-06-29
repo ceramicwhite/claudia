@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
+import ReactDOM from "react-dom";
 import { Calendar, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -201,8 +202,32 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
     onSelect: (value: number | string) => void;
   }> = ({ items, selectedValue, onSelect }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
     const dropdownRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
+    
+    // Calculate dropdown position
+    useEffect(() => {
+      if (!isOpen || !buttonRef.current) return;
+      
+      const rect = buttonRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const dropdownHeight = Math.min(300, items.length * 36 + 8); // Approximate height
+      
+      let top = rect.bottom + 4;
+      
+      // If not enough space below, position above
+      if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
+        top = rect.top - dropdownHeight - 4;
+      }
+      
+      setDropdownPosition({
+        top,
+        left: rect.left,
+        width: rect.width
+      });
+    }, [isOpen, items.length]);
     
     // Close on click outside
     useEffect(() => {
@@ -223,6 +248,18 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [isOpen]);
     
+    // Close on scroll
+    useEffect(() => {
+      if (!isOpen) return;
+      
+      const handleScroll = () => {
+        setIsOpen(false);
+      };
+      
+      window.addEventListener("scroll", handleScroll, true);
+      return () => window.removeEventListener("scroll", handleScroll, true);
+    }, [isOpen]);
+    
     return (
       <div className="relative">
         <button
@@ -235,12 +272,15 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
           <ChevronDown className={cn("ml-2 h-4 w-4 opacity-50 transition-transform", isOpen && "rotate-180")} />
         </button>
         
-        {isOpen && (
+        {isOpen && ReactDOM.createPortal(
           <div 
             ref={dropdownRef}
-            className="absolute z-[100] w-full mt-1 bg-popover rounded-md shadow-lg border border-border animate-in fade-in-0 zoom-in-95"
+            className="fixed z-[200] bg-popover rounded-md shadow-lg border border-border animate-in fade-in-0 zoom-in-95"
             style={{
-              maxHeight: 'min(300px, calc(100vh - 200px))',
+              top: `${dropdownPosition.top}px`,
+              left: `${dropdownPosition.left}px`,
+              width: `${dropdownPosition.width}px`,
+              maxHeight: 'min(300px, calc(100vh - 20px))',
               overflowY: 'auto'
             }}
           >
@@ -262,7 +302,8 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
                 </button>
               ))}
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     );
@@ -284,8 +325,8 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   );
 
   const popoverContent = (
-    <div className="w-[320px] space-y-4 bg-background border border-border rounded-lg shadow-lg p-4 overflow-visible">
-      <div className="space-y-3 overflow-visible">
+    <div className="w-[320px] space-y-4 bg-background border border-border rounded-lg shadow-lg p-4">
+      <div className="space-y-3">
         <Label className="text-sm font-medium text-foreground">
           Select Date & Time
         </Label>
