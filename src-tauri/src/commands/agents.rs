@@ -32,7 +32,6 @@ pub struct Agent {
     pub enable_file_read: bool,
     pub enable_file_write: bool,
     pub enable_network: bool,
-    pub scheduled_start_time: Option<String>, // ISO 8601 datetime string
     pub created_at: String,
     pub updated_at: String,
 }
@@ -48,9 +47,10 @@ pub struct AgentRun {
     pub model: String,
     pub project_path: String,
     pub session_id: String, // UUID session ID from Claude Code
-    pub status: String,     // 'pending', 'running', 'completed', 'failed', 'cancelled'
+    pub status: String,     // 'pending', 'running', 'completed', 'failed', 'cancelled', 'scheduled'
     pub pid: Option<u32>,
     pub process_started_at: Option<String>,
+    pub scheduled_start_time: Option<String>, // ISO 8601 datetime string for scheduled runs
     pub created_at: String,
     pub completed_at: Option<String>,
 }
@@ -93,7 +93,6 @@ pub struct AgentData {
     pub enable_file_read: bool,
     pub enable_file_write: bool,
     pub enable_network: bool,
-    pub scheduled_start_time: Option<String>,
 }
 
 /// Database connection state
@@ -314,6 +313,12 @@ pub fn init_database(app: &AppHandle) -> SqliteResult<Connection> {
         [],
     );
 
+    // Add scheduled_start_time column to agent_runs table for scheduling individual runs
+    let _ = conn.execute(
+        "ALTER TABLE agent_runs ADD COLUMN scheduled_start_time TEXT",
+        [],
+    );
+
     // Drop old columns that are no longer needed (data is now read from JSONL files)
     // Note: SQLite doesn't support DROP COLUMN, so we'll ignore errors for existing columns
     let _ = conn.execute(
@@ -439,7 +444,7 @@ pub async fn list_agents(db: State<'_, AgentDb>) -> Result<Vec<Agent>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
 
     let mut stmt = conn
-        .prepare("SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time, created_at, updated_at FROM agents ORDER BY created_at DESC")
+        .prepare("SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, created_at, updated_at FROM agents ORDER BY created_at DESC")
         .map_err(|e| e.to_string())?;
 
     let agents = stmt
@@ -457,9 +462,8 @@ pub async fn list_agents(db: State<'_, AgentDb>) -> Result<Vec<Agent>, String> {
                 enable_file_read: row.get::<_, bool>(7).unwrap_or(true),
                 enable_file_write: row.get::<_, bool>(8).unwrap_or(true),
                 enable_network: row.get::<_, bool>(9).unwrap_or(false),
-                scheduled_start_time: row.get(10)?,
-                created_at: row.get(11)?,
-                updated_at: row.get(12)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -482,7 +486,6 @@ pub async fn create_agent(
     enable_file_read: Option<bool>,
     enable_file_write: Option<bool>,
     enable_network: Option<bool>,
-    scheduled_start_time: Option<String>,
 ) -> Result<Agent, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     let model = model.unwrap_or_else(|| "sonnet".to_string());
@@ -492,8 +495,8 @@ pub async fn create_agent(
     let enable_network = enable_network.unwrap_or(false);
 
     conn.execute(
-        "INSERT INTO agents (name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-        params![name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time],
+        "INSERT INTO agents (name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network],
     )
     .map_err(|e| e.to_string())?;
 
@@ -502,7 +505,7 @@ pub async fn create_agent(
     // Fetch the created agent
     let agent = conn
         .query_row(
-            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time, created_at, updated_at FROM agents WHERE id = ?1",
+            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, created_at, updated_at FROM agents WHERE id = ?1",
             params![id],
             |row| {
                 Ok(Agent {
@@ -516,9 +519,8 @@ pub async fn create_agent(
                     enable_file_read: row.get(7)?,
                     enable_file_write: row.get(8)?,
                     enable_network: row.get(9)?,
-                    scheduled_start_time: row.get(10)?,
-                    created_at: row.get(11)?,
-                    updated_at: row.get(12)?,
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
                 })
             },
         )
@@ -541,7 +543,6 @@ pub async fn update_agent(
     enable_file_read: Option<bool>,
     enable_file_write: Option<bool>,
     enable_network: Option<bool>,
-    scheduled_start_time: Option<String>,
 ) -> Result<Agent, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     let model = model.unwrap_or_else(|| "sonnet".to_string());
@@ -579,11 +580,6 @@ pub async fn update_agent(
         query.push_str(&format!(", enable_network = ?{}", param_count));
         params_vec.push(Box::new(en));
     }
-    if let Some(sst) = scheduled_start_time {
-        param_count += 1;
-        query.push_str(&format!(", scheduled_start_time = ?{}", param_count));
-        params_vec.push(Box::new(sst));
-    }
 
     param_count += 1;
     query.push_str(&format!(" WHERE id = ?{}", param_count));
@@ -598,7 +594,7 @@ pub async fn update_agent(
     // Fetch the updated agent
     let agent = conn
         .query_row(
-            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time, created_at, updated_at FROM agents WHERE id = ?1",
+            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, created_at, updated_at FROM agents WHERE id = ?1",
             params![id],
             |row| {
                 Ok(Agent {
@@ -612,9 +608,8 @@ pub async fn update_agent(
                     enable_file_read: row.get(7)?,
                     enable_file_write: row.get(8)?,
                     enable_network: row.get(9)?,
-                    scheduled_start_time: row.get(10)?,
-                    created_at: row.get(11)?,
-                    updated_at: row.get(12)?,
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
                 })
             },
         )
@@ -641,7 +636,7 @@ pub async fn get_agent(db: State<'_, AgentDb>, id: i64) -> Result<Agent, String>
 
     let agent = conn
         .query_row(
-            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time, created_at, updated_at FROM agents WHERE id = ?1",
+            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, created_at, updated_at FROM agents WHERE id = ?1",
             params![id],
             |row| {
                 Ok(Agent {
@@ -655,9 +650,8 @@ pub async fn get_agent(db: State<'_, AgentDb>, id: i64) -> Result<Agent, String>
                     enable_file_read: row.get::<_, bool>(7).unwrap_or(true),
                     enable_file_write: row.get::<_, bool>(8).unwrap_or(true),
                     enable_network: row.get::<_, bool>(9).unwrap_or(false),
-                    scheduled_start_time: row.get(10)?,
-                    created_at: row.get(11)?,
-                    updated_at: row.get(12)?,
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
                 })
             },
         )
@@ -675,10 +669,10 @@ pub async fn list_agent_runs(
     let conn = db.0.lock().map_err(|e| e.to_string())?;
 
     let query = if agent_id.is_some() {
-        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, created_at, completed_at 
+        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at 
          FROM agent_runs WHERE agent_id = ?1 ORDER BY created_at DESC"
     } else {
-        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, created_at, completed_at 
+        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at 
          FROM agent_runs ORDER BY created_at DESC"
     };
 
@@ -703,8 +697,9 @@ pub async fn list_agent_runs(
                 .flatten()
                 .map(|p| p as u32),
             process_started_at: row.get(10)?,
-            created_at: row.get(11)?,
-            completed_at: row.get(12)?,
+            scheduled_start_time: row.get(11)?,
+            created_at: row.get(12)?,
+            completed_at: row.get(13)?,
         })
     };
 
@@ -727,7 +722,7 @@ pub async fn get_agent_run(db: State<'_, AgentDb>, id: i64) -> Result<AgentRun, 
 
     let run = conn
         .query_row(
-            "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, created_at, completed_at 
+            "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at 
              FROM agent_runs WHERE id = ?1",
             params![id],
             |row| {
@@ -743,8 +738,9 @@ pub async fn get_agent_run(db: State<'_, AgentDb>, id: i64) -> Result<AgentRun, 
                     status: row.get::<_, String>(8).unwrap_or_else(|_| "pending".to_string()),
                     pid: row.get::<_, Option<i64>>(9).ok().flatten().map(|p| p as u32),
                     process_started_at: row.get(10)?,
-                    created_at: row.get(11)?,
-                    completed_at: row.get(12)?,
+                    scheduled_start_time: row.get(11)?,
+                    created_at: row.get(12)?,
+                    completed_at: row.get(13)?,
                 })
             },
         )
@@ -1490,7 +1486,7 @@ pub async fn list_running_sessions(db: State<'_, AgentDb>) -> Result<Vec<AgentRu
     let conn = db.0.lock().map_err(|e| e.to_string())?;
 
     let mut stmt = conn.prepare(
-        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, created_at, completed_at 
+        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at 
          FROM agent_runs WHERE status = 'running' ORDER BY process_started_at DESC"
     ).map_err(|e| e.to_string())?;
 
@@ -1514,8 +1510,9 @@ pub async fn list_running_sessions(db: State<'_, AgentDb>) -> Result<Vec<AgentRu
                     .flatten()
                     .map(|p| p as u32),
                 process_started_at: row.get(10)?,
-                created_at: row.get(11)?,
-                completed_at: row.get(12)?,
+                scheduled_start_time: row.get(11)?,
+                created_at: row.get(12)?,
+                completed_at: row.get(13)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -1802,7 +1799,7 @@ pub async fn export_agent(db: State<'_, AgentDb>, id: i64) -> Result<String, Str
     // Fetch the agent
     let agent = conn
         .query_row(
-            "SELECT name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time FROM agents WHERE id = ?1",
+            "SELECT name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network FROM agents WHERE id = ?1",
             params![id],
             |row| {
                 Ok(serde_json::json!({
@@ -1814,8 +1811,7 @@ pub async fn export_agent(db: State<'_, AgentDb>, id: i64) -> Result<String, Str
                     "sandbox_enabled": row.get::<_, bool>(5)?,
                     "enable_file_read": row.get::<_, bool>(6)?,
                     "enable_file_write": row.get::<_, bool>(7)?,
-                    "enable_network": row.get::<_, bool>(8)?,
-                    "scheduled_start_time": row.get::<_, Option<String>>(9)?
+                    "enable_network": row.get::<_, bool>(8)?
                 }))
             },
         )
@@ -2006,7 +2002,7 @@ pub async fn import_agent(db: State<'_, AgentDb>, json_data: String) -> Result<A
 
     // Create the agent
     conn.execute(
-        "INSERT INTO agents (name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        "INSERT INTO agents (name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             final_name,
             agent_data.icon,
@@ -2016,8 +2012,7 @@ pub async fn import_agent(db: State<'_, AgentDb>, json_data: String) -> Result<A
             agent_data.sandbox_enabled,
             agent_data.enable_file_read,
             agent_data.enable_file_write,
-            agent_data.enable_network,
-            agent_data.scheduled_start_time
+            agent_data.enable_network
         ],
     )
     .map_err(|e| format!("Failed to create agent: {}", e))?;
@@ -2027,7 +2022,7 @@ pub async fn import_agent(db: State<'_, AgentDb>, json_data: String) -> Result<A
     // Fetch the created agent
     let agent = conn
         .query_row(
-            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time, created_at, updated_at FROM agents WHERE id = ?1",
+            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, created_at, updated_at FROM agents WHERE id = ?1",
             params![id],
             |row| {
                 Ok(Agent {
@@ -2041,9 +2036,8 @@ pub async fn import_agent(db: State<'_, AgentDb>, json_data: String) -> Result<A
                     enable_file_read: row.get(7)?,
                     enable_file_write: row.get(8)?,
                     enable_network: row.get(9)?,
-                    scheduled_start_time: row.get(10)?,
-                    created_at: row.get(11)?,
-                    updated_at: row.get(12)?,
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
                 })
             },
         )
@@ -2194,4 +2188,93 @@ pub async fn import_agent_from_github(
 
     // Import using existing function
     import_agent(db, json_data).await
+}
+
+/// Create a scheduled agent run that will execute at a specific time
+#[tauri::command]
+pub async fn create_scheduled_agent_run(
+    db: State<'_, AgentDb>,
+    agent_id: i64,
+    project_path: String,
+    task: String,
+    model: String,
+    scheduled_start_time: String,
+) -> Result<i64, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    
+    // Get the agent details
+    let (agent_name, agent_icon) = conn
+        .query_row(
+            "SELECT name, icon FROM agents WHERE id = ?1",
+            params![agent_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .map_err(|e| format!("Failed to find agent: {}", e))?;
+    
+    // Create a run record with 'scheduled' status
+    conn.execute(
+        "INSERT INTO agent_runs (agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, scheduled_start_time) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![agent_id, agent_name, agent_icon, task, model, project_path, "", "scheduled", scheduled_start_time],
+    )
+    .map_err(|e| format!("Failed to create scheduled run: {}", e))?;
+    
+    let run_id = conn.last_insert_rowid();
+    log::info!("Created scheduled agent run {} for agent {} at {}", run_id, agent_id, scheduled_start_time);
+    
+    Ok(run_id)
+}
+
+/// Get a list of all scheduled agent runs
+#[tauri::command]
+pub async fn get_scheduled_agent_runs(db: State<'_, AgentDb>) -> Result<Vec<AgentRun>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at 
+             FROM agent_runs 
+             WHERE status = 'scheduled' AND scheduled_start_time IS NOT NULL 
+             ORDER BY scheduled_start_time ASC"
+        )
+        .map_err(|e| e.to_string())?;
+    
+    let runs = stmt
+        .query_map([], |row| {
+            Ok(AgentRun {
+                id: Some(row.get(0)?),
+                agent_id: row.get(1)?,
+                agent_name: row.get(2)?,
+                agent_icon: row.get(3)?,
+                task: row.get(4)?,
+                model: row.get(5)?,
+                project_path: row.get(6)?,
+                session_id: row.get(7)?,
+                status: row.get(8)?,
+                pid: row.get(9)?,
+                process_started_at: row.get(10)?,
+                scheduled_start_time: row.get(11)?,
+                created_at: row.get(12)?,
+                completed_at: row.get(13)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    
+    Ok(runs)
+}
+
+/// Cancel a scheduled agent run
+#[tauri::command]
+pub async fn cancel_scheduled_agent_run(db: State<'_, AgentDb>, run_id: i64) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    
+    conn.execute(
+        "UPDATE agent_runs SET status = 'cancelled', completed_at = CURRENT_TIMESTAMP WHERE id = ?1 AND status = 'scheduled'",
+        params![run_id],
+    )
+    .map_err(|e| format!("Failed to cancel scheduled run: {}", e))?;
+    
+    log::info!("Cancelled scheduled agent run {}", run_id);
+    Ok(())
 }

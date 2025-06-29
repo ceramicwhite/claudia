@@ -11,12 +11,14 @@ import {
   Copy,
   ChevronDown,
   Maximize2,
-  X
+  X,
+  Clock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover } from "@/components/ui/popover";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { api, type Agent } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -72,6 +74,7 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
   const [projectPath, setProjectPath] = useState("");
   const [task, setTask] = useState(agent.default_task || "");
   const [model, setModel] = useState(agent.model || "sonnet");
+  const [scheduledStartTime, setScheduledStartTime] = useState<string | undefined>(undefined);
   const [isRunning, setIsRunning] = useState(false);
   const [messages, setMessages] = useState<ClaudeStreamMessage[]>([]);
   const [rawJsonlOutput, setRawJsonlOutput] = useState<string[]>([]);
@@ -267,6 +270,28 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
 
   const handleExecute = async () => {
     if (!projectPath || !task.trim()) return;
+
+    // If scheduled time is set, create a scheduled execution instead
+    if (scheduledStartTime) {
+      try {
+        setError(null);
+        // Create a scheduled agent run
+        await api.createScheduledAgentRun(agent.id!, projectPath, task, model, scheduledStartTime);
+        
+        // Show success message
+        setError(null);
+        alert(`Agent scheduled to run at ${new Date(scheduledStartTime).toLocaleString()}`);
+        
+        // Clear the form
+        setScheduledStartTime(undefined);
+        onBack();
+        return;
+      } catch (err) {
+        console.error("Failed to schedule agent:", err);
+        setError("Failed to schedule agent execution");
+        return;
+      }
+    }
 
     let runId: number | null = null;
     
@@ -650,7 +675,7 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
                   disabled={isRunning}
                   className="flex-1"
                   onKeyPress={(e) => {
-                    if (e.key === "Enter" && !isRunning && projectPath && task.trim()) {
+                    if (e.key === "Enter" && !isRunning && projectPath && task.trim() && !scheduledStartTime) {
                       handleExecute();
                     }
                   }}
@@ -658,12 +683,17 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
                 <Button
                   onClick={isRunning ? handleStop : handleExecute}
                   disabled={!projectPath || !task.trim()}
-                  variant={isRunning ? "destructive" : "default"}
+                  variant={isRunning ? "destructive" : (scheduledStartTime ? "secondary" : "default")}
                 >
                   {isRunning ? (
                     <>
                       <StopCircle className="mr-2 h-4 w-4" />
                       Stop
+                    </>
+                  ) : scheduledStartTime ? (
+                    <>
+                      <Clock className="mr-2 h-4 w-4" />
+                      Schedule
                     </>
                   ) : (
                     <>
@@ -673,6 +703,23 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
                   )}
                 </Button>
               </div>
+            </div>
+
+            {/* Scheduling */}
+            <div className="space-y-2">
+              <Label>Schedule Execution (Optional)</Label>
+              <DateTimePicker
+                value={scheduledStartTime}
+                onChange={setScheduledStartTime}
+                placeholder="Run immediately or select a time"
+                className="max-w-md"
+                disabled={isRunning}
+              />
+              <p className="text-xs text-muted-foreground">
+                {scheduledStartTime 
+                  ? `Agent will be queued to run at ${new Date(scheduledStartTime).toLocaleString()}`
+                  : "Leave empty to run immediately when you click Execute"}
+              </p>
             </div>
           </div>
         </div>

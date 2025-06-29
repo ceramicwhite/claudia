@@ -718,8 +718,7 @@ export const api = {
     sandbox_enabled?: boolean,
     enable_file_read?: boolean,
     enable_file_write?: boolean,
-    enable_network?: boolean,
-    scheduled_start_time?: string
+    enable_network?: boolean
   ): Promise<Agent> {
     try {
       return await invoke<Agent>('create_agent', { 
@@ -731,8 +730,7 @@ export const api = {
         sandboxEnabled: sandbox_enabled,
         enableFileRead: enable_file_read,
         enableFileWrite: enable_file_write,
-        enableNetwork: enable_network,
-        scheduledStartTime: scheduled_start_time
+        enableNetwork: enable_network
       });
     } catch (error) {
       console.error("Failed to create agent:", error);
@@ -764,8 +762,7 @@ export const api = {
     sandbox_enabled?: boolean,
     enable_file_read?: boolean,
     enable_file_write?: boolean,
-    enable_network?: boolean,
-    scheduled_start_time?: string
+    enable_network?: boolean
   ): Promise<Agent> {
     try {
       return await invoke<Agent>('update_agent', { 
@@ -778,8 +775,7 @@ export const api = {
         sandboxEnabled: sandbox_enabled,
         enableFileRead: enable_file_read,
         enableFileWrite: enable_file_write,
-        enableNetwork: enable_network,
-        scheduledStartTime: scheduled_start_time
+        enableNetwork: enable_network
       });
     } catch (error) {
       console.error("Failed to update agent:", error);
@@ -876,28 +872,58 @@ export const api = {
   },
 
   /**
-   * Get a list of all scheduled agents
-   * @returns Promise resolving to array of scheduled agents
+   * Creates a scheduled agent run
+   * @param agentId - The agent ID to execute
+   * @param projectPath - The project path to run the agent in
+   * @param task - The task description
+   * @param model - Model to use for execution
+   * @param scheduledStartTime - ISO 8601 datetime string for when to execute
+   * @returns Promise resolving to the scheduled run ID
    */
-  async getScheduledAgents(): Promise<Agent[]> {
+  async createScheduledAgentRun(
+    agentId: number, 
+    projectPath: string, 
+    task: string, 
+    model: string,
+    scheduledStartTime: string
+  ): Promise<number> {
     try {
-      return await invoke<Agent[]>('get_scheduled_agents');
+      return await invoke<number>('create_scheduled_agent_run', { 
+        agentId, 
+        projectPath, 
+        task, 
+        model,
+        scheduledStartTime
+      });
     } catch (error) {
-      console.error("Failed to get scheduled agents:", error);
+      console.error("Failed to create scheduled agent run:", error);
       throw error;
     }
   },
 
   /**
-   * Clear the scheduled start time for an agent
-   * @param agentId - The agent ID
-   * @returns Promise resolving when schedule is cleared
+   * Get a list of all scheduled agent runs
+   * @returns Promise resolving to array of scheduled runs
    */
-  async clearAgentSchedule(agentId: number): Promise<void> {
+  async getScheduledAgentRuns(): Promise<AgentRunWithMetrics[]> {
     try {
-      await invoke('clear_agent_schedule', { agentId });
+      return await invoke<AgentRunWithMetrics[]>('get_scheduled_agent_runs');
     } catch (error) {
-      console.error("Failed to clear agent schedule:", error);
+      console.error("Failed to get scheduled agent runs:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Cancel a scheduled agent run
+   * @param runId - The run ID to cancel
+   * @returns Promise resolving when schedule is cancelled
+   */
+  async cancelScheduledAgentRun(runId: number): Promise<void> {
+    try {
+      await invoke('cancel_scheduled_agent_run', { runId });
+    } catch (error) {
+      console.error("Failed to cancel scheduled agent run:", error);
       throw error;
     }
   },

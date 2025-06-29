@@ -17,6 +17,7 @@ use commands::agents::{
     import_agent_from_file, import_agent_from_github, init_database, kill_agent_session,
     list_agent_runs, list_agent_runs_with_metrics, list_agents, list_claude_installations,
     list_running_sessions, set_claude_binary_path, stream_session_output, update_agent, AgentDb,
+    create_scheduled_agent_run, get_scheduled_agent_runs, cancel_scheduled_agent_run,
 };
 use commands::claude::{
     cancel_claude_execution, check_auto_checkpoint, check_claude_version, cleanup_old_checkpoints,
@@ -46,7 +47,7 @@ use commands::usage::{
     get_session_stats, get_usage_by_date_range, get_usage_details, get_usage_stats,
 };
 use process::ProcessRegistryState;
-use scheduler::{clear_agent_schedule, get_scheduled_agents, start_scheduler, stop_scheduler, SchedulerState};
+use scheduler::{start_scheduler, stop_scheduler, SchedulerState};
 use std::sync::Mutex;
 use tauri::{Manager, WindowEvent};
 
@@ -205,8 +206,9 @@ fn main() {
             mcp_save_project_config,
             capture_url_screenshot,
             cleanup_screenshot_temp_files,
-            get_scheduled_agents,
-            clear_agent_schedule
+            create_scheduled_agent_run,
+            get_scheduled_agent_runs,
+            cancel_scheduled_agent_run
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { .. } = event {
