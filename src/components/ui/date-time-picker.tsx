@@ -52,8 +52,8 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   min,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [tempValue, setTempValue] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const [hasInteracted, setHasInteracted] = useState(false);
   
   // Parse the ISO string to local datetime-local format
   const toLocalDateTimeString = (isoString?: string) => {
@@ -89,28 +89,48 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
     return date.toLocaleString(undefined, options);
   };
 
-  const [localValue, setLocalValue] = useState(toLocalDateTimeString(value));
+  // Get initial value - if no value is provided, use current date/time
+  const getInitialValue = () => {
+    if (value) return toLocalDateTimeString(value);
+    const now = new Date();
+    // Round to nearest 5 minutes for better UX
+    now.setMinutes(Math.ceil(now.getMinutes() / 5) * 5);
+    now.setSeconds(0);
+    now.setMilliseconds(0);
+    return toLocalDateTimeString(now.toISOString());
+  };
+
+  const [localValue, setLocalValue] = useState(getInitialValue());
+  const [tempValue, setTempValue] = useState(localValue);
 
   useEffect(() => {
-    setLocalValue(toLocalDateTimeString(value));
+    const newValue = toLocalDateTimeString(value);
+    setLocalValue(newValue || getInitialValue());
   }, [value]);
 
   // Initialize temp value when popover opens
   useEffect(() => {
     if (isOpen) {
-      setTempValue(localValue);
+      const currentValue = localValue || getInitialValue();
+      setTempValue(currentValue);
+      setHasInteracted(false);
+      // Auto-save the initial value if there's no value set yet
+      if (!value && currentValue) {
+        onChange(toISOString(currentValue));
+      }
     }
-  }, [isOpen, localValue]);
+  }, [isOpen]);
 
   const handleDateTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setTempValue(newValue);
-  };
-
-  const handleSave = () => {
-    setLocalValue(tempValue);
-    onChange(toISOString(tempValue));
-    setIsOpen(false);
+    setHasInteracted(true);
+    
+    // Auto-save on change
+    if (newValue) {
+      setLocalValue(newValue);
+      onChange(toISOString(newValue));
+    }
   };
 
   const handleClear = () => {
@@ -120,8 +140,12 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
     setIsOpen(false);
   };
 
-  const handleCancel = () => {
-    setTempValue(localValue);
+  const handleClose = () => {
+    // Save the current temp value when closing if user has interacted
+    if (hasInteracted && tempValue) {
+      setLocalValue(tempValue);
+      onChange(toISOString(tempValue));
+    }
     setIsOpen(false);
   };
 
@@ -163,40 +187,25 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
           />
           <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         </div>
+        <p className="text-xs text-muted-foreground">
+          Changes are saved automatically
+        </p>
       </div>
       
-      <div className="flex items-center justify-between space-x-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleCancel}
-          className="flex-1"
-        >
-          Cancel
-        </Button>
+      <div className="flex items-center justify-end">
         <Button
           variant="outline"
           size="sm"
           onClick={handleClear}
-          className="flex-1"
           disabled={!tempValue}
         >
-          Clear
-        </Button>
-        <Button
-          variant="default"
-          size="sm"
-          onClick={handleSave}
-          className="flex-1"
-          disabled={!tempValue}
-        >
-          Save
+          Clear Schedule
         </Button>
       </div>
       
       {tempValue && (
         <div className="text-xs text-muted-foreground border-t border-border pt-3">
-          <p>Selected: {formatDateTime(toISOString(tempValue))}</p>
+          <p>Scheduled for: {formatDateTime(toISOString(tempValue))}</p>
           <p className="mt-1">Timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}</p>
         </div>
       )}
@@ -208,7 +217,13 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
       trigger={triggerButton}
       content={popoverContent}
       open={isOpen}
-      onOpenChange={setIsOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          handleClose();
+        } else {
+          setIsOpen(true);
+        }
+      }}
       className="w-auto p-0"
       align="start"
     />
