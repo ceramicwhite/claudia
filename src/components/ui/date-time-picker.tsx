@@ -206,28 +206,42 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
     const dropdownRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
     const isInteractingRef = useRef(false);
+    const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     
     // Calculate dropdown position
     useEffect(() => {
       if (!isOpen || !buttonRef.current) return;
       
-      const rect = buttonRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const dropdownHeight = Math.min(300, items.length * 36 + 8); // Approximate height
+      const updatePosition = () => {
+        if (!buttonRef.current || !dropdownRef.current) return;
+        
+        const rect = buttonRef.current.getBoundingClientRect();
+        const dropdownHeight = dropdownRef.current?.offsetHeight || Math.min(300, items.length * 36 + 8);
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        
+        // Default to positioning below
+        let top = rect.bottom + 4;
+        
+        // Only position above if there's not enough space below AND more space above
+        if (spaceBelow < dropdownHeight + 10 && spaceAbove > dropdownHeight + 10) {
+          top = rect.top - dropdownHeight - 4;
+        }
+        
+        setDropdownPosition({
+          top,
+          left: rect.left,
+          width: rect.width
+        });
+      };
       
-      // Always position below unless there's absolutely no space
-      let top = rect.bottom + 4;
+      // Initial position
+      updatePosition();
       
-      // Only position above if there's not enough space below AND more space above
-      if (spaceBelow < 100 && rect.top > spaceBelow) {
-        top = rect.top - dropdownHeight - 4;
-      }
+      // Update position after render to get accurate height
+      const timer = setTimeout(updatePosition, 0);
       
-      setDropdownPosition({
-        top,
-        left: rect.left,
-        width: rect.width
-      });
+      return () => clearTimeout(timer);
     }, [isOpen, items.length]);
     
     // Close on click outside
@@ -238,19 +252,28 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         // Don't close if we're interacting with the dropdown
         if (isInteractingRef.current) return;
         
-        if (
+        // Check if click is outside both button and dropdown
+        const clickedOutside = 
           dropdownRef.current &&
           buttonRef.current &&
           !dropdownRef.current.contains(event.target as Node) &&
-          !buttonRef.current.contains(event.target as Node)
-        ) {
-          setIsOpen(false);
+          !buttonRef.current.contains(event.target as Node);
+          
+        if (clickedOutside) {
+          // Small delay to ensure scrollbar interactions complete
+          setTimeout(() => {
+            if (!isInteractingRef.current) {
+              setIsOpen(false);
+            }
+          }, 50);
         }
       };
       
       const handleMouseUp = () => {
-        // Reset interaction flag on global mouse up
-        isInteractingRef.current = false;
+        // Delay resetting interaction flag to allow scrollbar interactions to complete
+        setTimeout(() => {
+          isInteractingRef.current = false;
+        }, 100);
       };
       
       document.addEventListener("mousedown", handleClickOutside);
@@ -270,11 +293,32 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) {
           return;
         }
-        setIsOpen(false);
+        
+        // Don't close if we're interacting
+        if (isInteractingRef.current) {
+          return;
+        }
+        
+        // Clear any existing timeout
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current);
+        }
+        
+        // Delay closing to allow for scrollbar interactions
+        scrollTimeoutRef.current = setTimeout(() => {
+          if (!isInteractingRef.current) {
+            setIsOpen(false);
+          }
+        }, 150);
       };
       
       window.addEventListener("scroll", handleScroll, true);
-      return () => window.removeEventListener("scroll", handleScroll, true);
+      return () => {
+        window.removeEventListener("scroll", handleScroll, true);
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current);
+        }
+      };
     }, [isOpen]);
     
     return (
@@ -282,7 +326,11 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         <button
           ref={buttonRef}
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            setIsOpen(!isOpen);
+          }}
           className="w-full flex items-center justify-between px-3 py-2 text-sm bg-background border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
         >
           <span>{items.find(item => item.value === selectedValue)?.label || selectedValue}</span>
@@ -300,11 +348,19 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
               maxHeight: 'min(300px, calc(100vh - 20px))',
               overflowY: 'auto'
             }}
-            onMouseDown={() => {
+            onMouseDown={(e) => {
               isInteractingRef.current = true;
+              // Prevent event from bubbling to avoid triggering document listeners
+              e.stopPropagation();
             }}
-            onMouseUp={() => {
-              isInteractingRef.current = false;
+            onMouseUp={(e) => {
+              e.stopPropagation();
+              // Don't immediately set to false - let the global handler do it with delay
+            }}
+            onWheel={(e) => {
+              // Mark as interacting when using mouse wheel
+              isInteractingRef.current = true;
+              e.stopPropagation();
             }}
           >
             <div className="p-1">
@@ -312,7 +368,9 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
                 <button
                   key={item.value}
                   type="button"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
                     onSelect(item.value);
                     setIsOpen(false);
                   }}
@@ -431,13 +489,15 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   );
 
   return (
-    <Popover 
-      trigger={triggerButton}
-      content={popoverContent}
-      open={isOpen}
-      onOpenChange={setIsOpen}
-      className="w-auto p-0 z-50"
-      align="start"
-    />
+    <div onClick={(e) => e.stopPropagation()}>
+      <Popover 
+        trigger={triggerButton}
+        content={popoverContent}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        className="w-auto p-0 z-50"
+        align="start"
+      />
+    </div>
   );
 };
