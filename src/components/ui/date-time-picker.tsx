@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { Calendar, Clock } from "lucide-react";
+import { Calendar as CalendarIcon, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover } from "@/components/ui/popover";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
+import { Calendar } from "@/components/ui/calendar";
+import { TimePicker } from "@/components/ui/time-picker";
 import { cn } from "@/lib/utils";
 
 interface DateTimePickerProps {
@@ -52,25 +53,27 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   min,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  
-  // Parse the ISO string to local datetime-local format
-  const toLocalDateTimeString = (isoString?: string) => {
-    if (!isoString) return "";
-    const date = new Date(isoString);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
+    value ? new Date(value) : undefined
+  );
+  const [selectedTime, setSelectedTime] = useState<string>(() => {
+    if (value) {
+      const date = new Date(value);
+      return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    }
+    return "";
+  });
 
-  // Convert local datetime-local format to ISO string
-  const toISOString = (localDateTime: string) => {
-    if (!localDateTime) return undefined;
-    const date = new Date(localDateTime);
-    return date.toISOString();
-  };
+  useEffect(() => {
+    if (value) {
+      const date = new Date(value);
+      setSelectedDate(date);
+      setSelectedTime(`${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`);
+    } else {
+      setSelectedDate(undefined);
+      setSelectedTime("");
+    }
+  }, [value]);
 
   // Format datetime for display
   const formatDateTime = (isoString?: string) => {
@@ -87,104 +90,153 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
     return date.toLocaleString(undefined, options);
   };
 
-  const [localValue, setLocalValue] = useState(toLocalDateTimeString(value));
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(date);
+    
+    // If we have a time, combine it with the new date
+    if (selectedTime) {
+      const [hours, minutes] = selectedTime.split(':').map(Number);
+      const newDateTime = new Date(date);
+      newDateTime.setHours(hours, minutes, 0, 0);
+      onChange(newDateTime.toISOString());
+    } else {
+      // Set time to current time if no time is selected
+      const now = new Date();
+      const newDateTime = new Date(date);
+      newDateTime.setHours(now.getHours(), now.getMinutes(), 0, 0);
+      const timeString = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      setSelectedTime(timeString);
+      onChange(newDateTime.toISOString());
+    }
+  };
 
-  useEffect(() => {
-    setLocalValue(toLocalDateTimeString(value));
-  }, [value]);
+  const handleTimeChange = (time: string) => {
+    setSelectedTime(time);
+    
+    if (selectedDate) {
+      const [hours, minutes] = time.split(':').map(Number);
+      const newDateTime = new Date(selectedDate);
+      newDateTime.setHours(hours, minutes, 0, 0);
+      onChange(newDateTime.toISOString());
+    } else {
+      // If no date is selected, use today
+      const today = new Date();
+      const [hours, minutes] = time.split(':').map(Number);
+      today.setHours(hours, minutes, 0, 0);
+      setSelectedDate(today);
+      onChange(today.toISOString());
+    }
+  };
 
-  const handleDateTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setLocalValue(newValue);
-    onChange(toISOString(newValue));
+  const handleSave = () => {
+    if (selectedDate && selectedTime) {
+      const [hours, minutes] = selectedTime.split(':').map(Number);
+      const newDateTime = new Date(selectedDate);
+      newDateTime.setHours(hours, minutes, 0, 0);
+      onChange(newDateTime.toISOString());
+    } else if (selectedDate) {
+      // If only date is selected, use current time
+      const now = new Date();
+      const newDateTime = new Date(selectedDate);
+      newDateTime.setHours(now.getHours(), now.getMinutes(), 0, 0);
+      onChange(newDateTime.toISOString());
+    }
+    setIsOpen(false);
   };
 
   const handleClear = () => {
-    setLocalValue("");
+    setSelectedDate(undefined);
+    setSelectedTime("");
     onChange(undefined);
     setIsOpen(false);
   };
 
-  const handleNow = () => {
-    const now = new Date();
-    const localNow = toLocalDateTimeString(now.toISOString());
-    setLocalValue(localNow);
-    onChange(now.toISOString());
+  const isDateDisabled = (date: Date) => {
+    if (!min) return false;
+    const minDate = new Date(min);
+    return date < minDate;
   };
 
-  const minDateTime = min ? toLocalDateTimeString(min) : toLocalDateTimeString(new Date().toISOString());
-
-  const triggerButton = (
-    <Button
-      variant="outline"
-      className={cn(
-        "justify-start text-left font-normal",
-        !value && "text-muted-foreground",
-        className
-      )}
-      disabled={disabled}
-    >
-      <Calendar className="mr-2 h-4 w-4" />
-      {value ? formatDateTime(value) : placeholder}
-    </Button>
-  );
-
-  const popoverContent = (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="datetime-input" className="text-sm font-medium">
-          Select Date & Time
-        </Label>
-        <div className="flex items-center space-x-2">
-          <Clock className="h-4 w-4 text-muted-foreground" />
-          <Input
-            id="datetime-input"
-            type="datetime-local"
-            value={localValue}
-            onChange={handleDateTimeChange}
-            min={minDateTime}
-            className="flex-1"
-          />
-        </div>
-      </div>
-      
-      <div className="flex items-center justify-between space-x-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleNow}
-          className="flex-1"
-        >
-          Now
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleClear}
-          className="flex-1"
-          disabled={!value}
-        >
-          Clear
-        </Button>
-      </div>
-      
-      {value && (
-        <div className="text-xs text-muted-foreground">
-          <p>Selected: {formatDateTime(value)}</p>
-          <p className="mt-1">Timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}</p>
-        </div>
-      )}
-    </div>
-  );
-
   return (
-    <Popover 
-      trigger={triggerButton}
-      content={popoverContent}
-      open={isOpen}
-      onOpenChange={setIsOpen}
-      className="w-auto p-4"
-      align="start"
-    />
+    <PopoverPrimitive.Root open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverPrimitive.Trigger asChild>
+        <Button
+          variant="outline"
+          className={cn(
+            "justify-start text-left font-normal",
+            !value && "text-muted-foreground",
+            className
+          )}
+          disabled={disabled}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4" />
+          {value ? formatDateTime(value) : placeholder}
+        </Button>
+      </PopoverPrimitive.Trigger>
+      
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          className={cn(
+            "z-50 w-auto rounded-md border border-border bg-popover p-0 text-popover-foreground shadow-md",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+            "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2",
+            "data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2"
+          )}
+          align="start"
+          sideOffset={4}
+        >
+          <div className="flex">
+            {/* Calendar */}
+            <Calendar
+              selected={selectedDate}
+              onSelect={handleDateSelect}
+              disabled={isDateDisabled}
+              className="rounded-md border-r border-border"
+            />
+            
+            {/* Time Picker */}
+            <div className="p-3 space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Time</Label>
+                <TimePicker
+                  value={selectedTime}
+                  onChange={handleTimeChange}
+                  disabled={disabled}
+                />
+              </div>
+              
+              <div className="flex flex-col space-y-2">
+                <Button
+                  onClick={handleSave}
+                  size="sm"
+                  className="w-full"
+                  disabled={!selectedDate}
+                >
+                  Save
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClear}
+                  className="w-full"
+                  disabled={!value}
+                >
+                  Clear
+                </Button>
+              </div>
+              
+              {value && (
+                <div className="text-xs text-muted-foreground border-t border-border pt-2">
+                  <p>Selected: {formatDateTime(value)}</p>
+                  <p className="mt-1">Timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
   );
 };
