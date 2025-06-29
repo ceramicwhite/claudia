@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Calendar, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +52,8 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   min,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [tempValue, setTempValue] = useState<string>("");
+  const inputRef = useRef<HTMLInputElement>(null);
   
   // Parse the ISO string to local datetime-local format
   const toLocalDateTimeString = (isoString?: string) => {
@@ -93,23 +95,34 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
     setLocalValue(toLocalDateTimeString(value));
   }, [value]);
 
+  // Initialize temp value when popover opens
+  useEffect(() => {
+    if (isOpen) {
+      setTempValue(localValue);
+    }
+  }, [isOpen, localValue]);
+
   const handleDateTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    setLocalValue(newValue);
-    onChange(toISOString(newValue));
+    setTempValue(newValue);
+  };
+
+  const handleSave = () => {
+    setLocalValue(tempValue);
+    onChange(toISOString(tempValue));
+    setIsOpen(false);
   };
 
   const handleClear = () => {
     setLocalValue("");
+    setTempValue("");
     onChange(undefined);
     setIsOpen(false);
   };
 
-  const handleNow = () => {
-    const now = new Date();
-    const localNow = toLocalDateTimeString(now.toISOString());
-    setLocalValue(localNow);
-    onChange(now.toISOString());
+  const handleCancel = () => {
+    setTempValue(localValue);
+    setIsOpen(false);
   };
 
   const minDateTime = min ? toLocalDateTimeString(min) : toLocalDateTimeString(new Date().toISOString());
@@ -130,21 +143,25 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   );
 
   const popoverContent = (
-    <div className="space-y-4">
+    <div className="space-y-4 bg-background border border-border rounded-lg shadow-lg p-4">
       <div className="space-y-2">
-        <Label htmlFor="datetime-input" className="text-sm font-medium">
+        <Label htmlFor="datetime-input" className="text-sm font-medium text-foreground">
           Select Date & Time
         </Label>
-        <div className="flex items-center space-x-2">
-          <Clock className="h-4 w-4 text-muted-foreground" />
+        <div className="relative">
           <Input
+            ref={inputRef}
             id="datetime-input"
             type="datetime-local"
-            value={localValue}
+            value={tempValue}
             onChange={handleDateTimeChange}
             min={minDateTime}
-            className="flex-1"
+            className="w-full pl-10 bg-background text-foreground border-input focus:border-ring"
+            style={{
+              colorScheme: 'dark'
+            }}
           />
+          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         </div>
       </div>
       
@@ -152,25 +169,34 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         <Button
           variant="outline"
           size="sm"
-          onClick={handleNow}
+          onClick={handleCancel}
           className="flex-1"
         >
-          Now
+          Cancel
         </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={handleClear}
           className="flex-1"
-          disabled={!value}
+          disabled={!tempValue}
         >
           Clear
         </Button>
+        <Button
+          variant="default"
+          size="sm"
+          onClick={handleSave}
+          className="flex-1"
+          disabled={!tempValue}
+        >
+          Save
+        </Button>
       </div>
       
-      {value && (
-        <div className="text-xs text-muted-foreground">
-          <p>Selected: {formatDateTime(value)}</p>
+      {tempValue && (
+        <div className="text-xs text-muted-foreground border-t border-border pt-3">
+          <p>Selected: {formatDateTime(toISOString(tempValue))}</p>
           <p className="mt-1">Timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}</p>
         </div>
       )}
@@ -183,7 +209,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
       content={popoverContent}
       open={isOpen}
       onOpenChange={setIsOpen}
-      className="w-auto p-4"
+      className="w-auto p-0"
       align="start"
     />
   );
