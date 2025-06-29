@@ -151,6 +151,11 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   const updateDateTime = (newComponents: Partial<DateTimeComponents>) => {
     const updated = { ...dateTimeComponents, ...newComponents };
     
+    // Auto-adjust year if month or day changed
+    if ('month' in newComponents || 'day' in newComponents) {
+      updated.year = autoAdjustYear(updated.month, updated.day);
+    }
+    
     // Ensure day is valid for the selected month
     const maxDay = new Date(updated.year, updated.month, 0).getDate();
     if (updated.day > maxDay) {
@@ -170,6 +175,19 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
       onChange(date.toISOString());
     }
   }, [isOpen]);
+
+  // Auto-set year based on selected month
+  const autoAdjustYear = (month: number, day: number) => {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    
+    // If selecting a month that's earlier than current month, assume next year
+    if (month < currentMonth || (month === currentMonth && day < now.getDate())) {
+      return currentYear + 1;
+    }
+    return currentYear;
+  };
 
   const handleClear = () => {
     onChange(undefined);
@@ -194,8 +212,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
     items: Array<{ value: number | string; label: string }>;
     selectedValue: number | string;
     onSelect: (value: number | string) => void;
-    maxHeight?: string;
-  }> = ({ items, selectedValue, onSelect, maxHeight = "200px" }) => {
+  }> = ({ items, selectedValue, onSelect }) => {
     const [isOpen, setIsOpen] = useState(false);
     
     return (
@@ -207,8 +224,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         }
         content={
           <div 
-            className="w-full max-h-[200px] overflow-y-auto bg-popover p-1 rounded-md shadow-md"
-            style={{ maxHeight }}
+            className="w-full bg-popover p-1 rounded-md shadow-md border border-border"
           >
             {items.map(item => (
               <button
@@ -231,7 +247,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         open={isOpen}
         onOpenChange={setIsOpen}
         align="start"
-        className="w-full"
+        className="w-full p-0"
       />
     );
   };
@@ -261,7 +277,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         {/* Date Selection */}
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">Date</Label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <DropdownMenu
               items={months}
               selectedValue={dateTimeComponents.month}
@@ -273,16 +289,10 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
               selectedValue={dateTimeComponents.day}
               onSelect={(value) => updateDateTime({ day: value as number })}
             />
-            
-            <DropdownMenu
-              items={Array.from({ length: 10 }, (_, i) => ({
-                value: new Date().getFullYear() + i,
-                label: (new Date().getFullYear() + i).toString()
-              }))}
-              selectedValue={dateTimeComponents.year}
-              onSelect={(value) => updateDateTime({ year: value as number })}
-            />
           </div>
+          <p className="text-xs text-muted-foreground text-center mt-1">
+            Year: {dateTimeComponents.year}
+          </p>
         </div>
 
         {/* Time Selection */}
