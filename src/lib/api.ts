@@ -179,6 +179,7 @@ export interface Agent {
   enable_file_read: boolean;
   enable_file_write: boolean;
   enable_network: boolean;
+  scheduled_start_time?: string; // ISO 8601 datetime string
   created_at: string;
   updated_at: string;
 }
@@ -717,7 +718,8 @@ export const api = {
     sandbox_enabled?: boolean,
     enable_file_read?: boolean,
     enable_file_write?: boolean,
-    enable_network?: boolean
+    enable_network?: boolean,
+    scheduled_start_time?: string
   ): Promise<Agent> {
     try {
       return await invoke<Agent>('create_agent', { 
@@ -729,7 +731,8 @@ export const api = {
         sandboxEnabled: sandbox_enabled,
         enableFileRead: enable_file_read,
         enableFileWrite: enable_file_write,
-        enableNetwork: enable_network
+        enableNetwork: enable_network,
+        scheduledStartTime: scheduled_start_time
       });
     } catch (error) {
       console.error("Failed to create agent:", error);
@@ -761,7 +764,8 @@ export const api = {
     sandbox_enabled?: boolean,
     enable_file_read?: boolean,
     enable_file_write?: boolean,
-    enable_network?: boolean
+    enable_network?: boolean,
+    scheduled_start_time?: string
   ): Promise<Agent> {
     try {
       return await invoke<Agent>('update_agent', { 
@@ -774,7 +778,8 @@ export const api = {
         sandboxEnabled: sandbox_enabled,
         enableFileRead: enable_file_read,
         enableFileWrite: enable_file_write,
-        enableNetwork: enable_network
+        enableNetwork: enable_network,
+        scheduledStartTime: scheduled_start_time
       });
     } catch (error) {
       console.error("Failed to update agent:", error);
@@ -867,6 +872,33 @@ export const api = {
       console.error("Failed to execute agent:", error);
       // Return a sentinel value to indicate error
       throw new Error(`Failed to execute agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  },
+
+  /**
+   * Get a list of all scheduled agents
+   * @returns Promise resolving to array of scheduled agents
+   */
+  async getScheduledAgents(): Promise<Agent[]> {
+    try {
+      return await invoke<Agent[]>('get_scheduled_agents');
+    } catch (error) {
+      console.error("Failed to get scheduled agents:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Clear the scheduled start time for an agent
+   * @param agentId - The agent ID
+   * @returns Promise resolving when schedule is cleared
+   */
+  async clearAgentSchedule(agentId: number): Promise<void> {
+    try {
+      await invoke('clear_agent_schedule', { agentId });
+    } catch (error) {
+      console.error("Failed to clear agent schedule:", error);
+      throw error;
     }
   },
 

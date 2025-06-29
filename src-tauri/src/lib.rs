@@ -6,6 +6,7 @@ pub mod claude_binary;
 pub mod commands;
 pub mod process;
 pub mod sandbox;
+pub mod scheduler;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

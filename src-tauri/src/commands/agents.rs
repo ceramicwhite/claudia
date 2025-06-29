@@ -32,6 +32,7 @@ pub struct Agent {
     pub enable_file_read: bool,
     pub enable_file_write: bool,
     pub enable_network: bool,
+    pub scheduled_start_time: Option<String>, // ISO 8601 datetime string
     pub created_at: String,
     pub updated_at: String,
 }
@@ -92,6 +93,7 @@ pub struct AgentData {
     pub enable_file_read: bool,
     pub enable_file_write: bool,
     pub enable_network: bool,
+    pub scheduled_start_time: Option<String>,
 }
 
 /// Database connection state
@@ -239,6 +241,7 @@ pub fn init_database(app: &AppHandle) -> SqliteResult<Connection> {
             enable_file_read BOOLEAN NOT NULL DEFAULT 1,
             enable_file_write BOOLEAN NOT NULL DEFAULT 1,
             enable_network BOOLEAN NOT NULL DEFAULT 0,
+            scheduled_start_time TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )",
@@ -269,6 +272,12 @@ pub fn init_database(app: &AppHandle) -> SqliteResult<Connection> {
     );
     let _ = conn.execute(
         "ALTER TABLE agents ADD COLUMN enable_network BOOLEAN DEFAULT 0",
+        [],
+    );
+    
+    // Add scheduled_start_time column for agent scheduling
+    let _ = conn.execute(
+        "ALTER TABLE agents ADD COLUMN scheduled_start_time TEXT",
         [],
     );
 
@@ -430,7 +439,7 @@ pub async fn list_agents(db: State<'_, AgentDb>) -> Result<Vec<Agent>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
 
     let mut stmt = conn
-        .prepare("SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, created_at, updated_at FROM agents ORDER BY created_at DESC")
+        .prepare("SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time, created_at, updated_at FROM agents ORDER BY created_at DESC")
         .map_err(|e| e.to_string())?;
 
     let agents = stmt
@@ -448,8 +457,9 @@ pub async fn list_agents(db: State<'_, AgentDb>) -> Result<Vec<Agent>, String> {
                 enable_file_read: row.get::<_, bool>(7).unwrap_or(true),
                 enable_file_write: row.get::<_, bool>(8).unwrap_or(true),
                 enable_network: row.get::<_, bool>(9).unwrap_or(false),
-                created_at: row.get(10)?,
-                updated_at: row.get(11)?,
+                scheduled_start_time: row.get(10)?,
+                created_at: row.get(11)?,
+                updated_at: row.get(12)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -472,6 +482,7 @@ pub async fn create_agent(
     enable_file_read: Option<bool>,
     enable_file_write: Option<bool>,
     enable_network: Option<bool>,
+    scheduled_start_time: Option<String>,
 ) -> Result<Agent, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     let model = model.unwrap_or_else(|| "sonnet".to_string());
@@ -481,8 +492,8 @@ pub async fn create_agent(
     let enable_network = enable_network.unwrap_or(false);
 
     conn.execute(
-        "INSERT INTO agents (name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network],
+        "INSERT INTO agents (name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time],
     )
     .map_err(|e| e.to_string())?;
 
@@ -491,7 +502,7 @@ pub async fn create_agent(
     // Fetch the created agent
     let agent = conn
         .query_row(
-            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, created_at, updated_at FROM agents WHERE id = ?1",
+            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time, created_at, updated_at FROM agents WHERE id = ?1",
             params![id],
             |row| {
                 Ok(Agent {
@@ -505,8 +516,9 @@ pub async fn create_agent(
                     enable_file_read: row.get(7)?,
                     enable_file_write: row.get(8)?,
                     enable_network: row.get(9)?,
-                    created_at: row.get(10)?,
-                    updated_at: row.get(11)?,
+                    scheduled_start_time: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
                 })
             },
         )
@@ -529,6 +541,7 @@ pub async fn update_agent(
     enable_file_read: Option<bool>,
     enable_file_write: Option<bool>,
     enable_network: Option<bool>,
+    scheduled_start_time: Option<String>,
 ) -> Result<Agent, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     let model = model.unwrap_or_else(|| "sonnet".to_string());
@@ -566,6 +579,11 @@ pub async fn update_agent(
         query.push_str(&format!(", enable_network = ?{}", param_count));
         params_vec.push(Box::new(en));
     }
+    if let Some(sst) = scheduled_start_time {
+        param_count += 1;
+        query.push_str(&format!(", scheduled_start_time = ?{}", param_count));
+        params_vec.push(Box::new(sst));
+    }
 
     param_count += 1;
     query.push_str(&format!(" WHERE id = ?{}", param_count));
@@ -580,7 +598,7 @@ pub async fn update_agent(
     // Fetch the updated agent
     let agent = conn
         .query_row(
-            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, created_at, updated_at FROM agents WHERE id = ?1",
+            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time, created_at, updated_at FROM agents WHERE id = ?1",
             params![id],
             |row| {
                 Ok(Agent {
@@ -594,8 +612,9 @@ pub async fn update_agent(
                     enable_file_read: row.get(7)?,
                     enable_file_write: row.get(8)?,
                     enable_network: row.get(9)?,
-                    created_at: row.get(10)?,
-                    updated_at: row.get(11)?,
+                    scheduled_start_time: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
                 })
             },
         )
@@ -622,7 +641,7 @@ pub async fn get_agent(db: State<'_, AgentDb>, id: i64) -> Result<Agent, String>
 
     let agent = conn
         .query_row(
-            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, created_at, updated_at FROM agents WHERE id = ?1",
+            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time, created_at, updated_at FROM agents WHERE id = ?1",
             params![id],
             |row| {
                 Ok(Agent {
@@ -636,8 +655,9 @@ pub async fn get_agent(db: State<'_, AgentDb>, id: i64) -> Result<Agent, String>
                     enable_file_read: row.get::<_, bool>(7).unwrap_or(true),
                     enable_file_write: row.get::<_, bool>(8).unwrap_or(true),
                     enable_network: row.get::<_, bool>(9).unwrap_or(false),
-                    created_at: row.get(10)?,
-                    updated_at: row.get(11)?,
+                    scheduled_start_time: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
                 })
             },
         )
@@ -1782,7 +1802,7 @@ pub async fn export_agent(db: State<'_, AgentDb>, id: i64) -> Result<String, Str
     // Fetch the agent
     let agent = conn
         .query_row(
-            "SELECT name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network FROM agents WHERE id = ?1",
+            "SELECT name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time FROM agents WHERE id = ?1",
             params![id],
             |row| {
                 Ok(serde_json::json!({
@@ -1794,7 +1814,8 @@ pub async fn export_agent(db: State<'_, AgentDb>, id: i64) -> Result<String, Str
                     "sandbox_enabled": row.get::<_, bool>(5)?,
                     "enable_file_read": row.get::<_, bool>(6)?,
                     "enable_file_write": row.get::<_, bool>(7)?,
-                    "enable_network": row.get::<_, bool>(8)?
+                    "enable_network": row.get::<_, bool>(8)?,
+                    "scheduled_start_time": row.get::<_, Option<String>>(9)?
                 }))
             },
         )
@@ -1985,7 +2006,7 @@ pub async fn import_agent(db: State<'_, AgentDb>, json_data: String) -> Result<A
 
     // Create the agent
     conn.execute(
-        "INSERT INTO agents (name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        "INSERT INTO agents (name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             final_name,
             agent_data.icon,
@@ -1995,7 +2016,8 @@ pub async fn import_agent(db: State<'_, AgentDb>, json_data: String) -> Result<A
             agent_data.sandbox_enabled,
             agent_data.enable_file_read,
             agent_data.enable_file_write,
-            agent_data.enable_network
+            agent_data.enable_network,
+            agent_data.scheduled_start_time
         ],
     )
     .map_err(|e| format!("Failed to create agent: {}", e))?;
@@ -2005,7 +2027,7 @@ pub async fn import_agent(db: State<'_, AgentDb>, json_data: String) -> Result<A
     // Fetch the created agent
     let agent = conn
         .query_row(
-            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, created_at, updated_at FROM agents WHERE id = ?1",
+            "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, scheduled_start_time, created_at, updated_at FROM agents WHERE id = ?1",
             params![id],
             |row| {
                 Ok(Agent {
@@ -2019,8 +2041,9 @@ pub async fn import_agent(db: State<'_, AgentDb>, json_data: String) -> Result<A
                     enable_file_read: row.get(7)?,
                     enable_file_write: row.get(8)?,
                     enable_network: row.get(9)?,
-                    created_at: row.get(10)?,
-                    updated_at: row.get(11)?,
+                    scheduled_start_time: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
                 })
             },
         )

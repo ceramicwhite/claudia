@@ -6,6 +6,7 @@ mod claude_binary;
 mod commands;
 mod process;
 mod sandbox;
+mod scheduler;
 
 use checkpoint::state::CheckpointState;
 use commands::agents::{
@@ -45,8 +46,9 @@ use commands::usage::{
     get_session_stats, get_usage_by_date_range, get_usage_details, get_usage_stats,
 };
 use process::ProcessRegistryState;
+use scheduler::{clear_agent_schedule, get_scheduled_agents, start_scheduler, stop_scheduler, SchedulerState};
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Manager, WindowEvent};
 
 fn main() {
     // Initialize logger
@@ -94,6 +96,15 @@ fn main() {
 
             // Initialize Claude process state
             app.manage(ClaudeProcessState::default());
+
+            // Initialize scheduler state
+            app.manage(SchedulerState::new());
+            
+            // Start the scheduler
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                start_scheduler(app_handle).await;
+            });
 
             Ok(())
         })
@@ -193,8 +204,19 @@ fn main() {
             mcp_read_project_config,
             mcp_save_project_config,
             capture_url_screenshot,
-            cleanup_screenshot_temp_files
+            cleanup_screenshot_temp_files,
+            get_scheduled_agents,
+            clear_agent_schedule
         ])
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { .. } = event {
+                // Stop the scheduler when the window is closing
+                let app_handle = window.app_handle().clone();
+                tauri::async_runtime::block_on(async move {
+                    stop_scheduler(&app_handle).await;
+                });
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -11,6 +11,7 @@ import MDEditor from "@uiw/react-md-editor";
 import { type AgentIconName } from "./CCAgents";
 import { AgentSandboxSettings } from "./AgentSandboxSettings";
 import { IconPicker, ICON_MAP } from "./IconPicker";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 
 interface CreateAgentProps {
   /**
@@ -52,6 +53,7 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
   const [enableFileRead, setEnableFileRead] = useState(agent?.enable_file_read ?? true);
   const [enableFileWrite, setEnableFileWrite] = useState(agent?.enable_file_write ?? true);
   const [enableNetwork, setEnableNetwork] = useState(agent?.enable_network ?? false);
+  const [scheduledStartTime, setScheduledStartTime] = useState<string | undefined>(agent?.scheduled_start_time);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -85,7 +87,8 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
           sandboxEnabled,
           enableFileRead,
           enableFileWrite,
-          enableNetwork
+          enableNetwork,
+          scheduledStartTime
         );
       } else {
         await api.createAgent(
@@ -97,7 +100,8 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
           sandboxEnabled,
           enableFileRead,
           enableFileWrite,
-          enableNetwork
+          enableNetwork,
+          scheduledStartTime
         );
       }
       
@@ -123,7 +127,8 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
          sandboxEnabled !== (agent?.sandbox_enabled ?? true) ||
          enableFileRead !== (agent?.enable_file_read ?? true) ||
          enableFileWrite !== (agent?.enable_file_write ?? true) ||
-         enableNetwork !== (agent?.enable_network ?? false)) && 
+         enableNetwork !== (agent?.enable_network ?? false) ||
+         scheduledStartTime !== agent?.scheduled_start_time) && 
         !confirm("You have unsaved changes. Are you sure you want to leave?")) {
       return;
     }
@@ -309,6 +314,20 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
                 </p>
               </div>
 
+              {/* Scheduling Settings */}
+              <div className="space-y-2">
+                <Label>Schedule Agent Start Time (Optional)</Label>
+                <DateTimePicker
+                  value={scheduledStartTime}
+                  onChange={setScheduledStartTime}
+                  placeholder="Select when agent should start"
+                  className="max-w-md"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Schedule this agent to start automatically at a specific time. The agent will run once at the scheduled time.
+                </p>
+              </div>
+
               {/* Sandbox Settings */}
               <AgentSandboxSettings
                 agent={{
@@ -322,6 +341,7 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
                   enable_file_read: enableFileRead,
                   enable_file_write: enableFileWrite,
                   enable_network: enableNetwork,
+                  scheduled_start_time: scheduledStartTime,
                   created_at: agent?.created_at || "",
                   updated_at: agent?.updated_at || ""
                 }}
