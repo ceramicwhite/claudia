@@ -16,16 +16,20 @@ interface RunningSessionsViewProps {
 }
 
 export function RunningSessionsView({ className, showBackButton = false, onBack }: RunningSessionsViewProps) {
-  const [runningSessions, setRunningSessions] = useState<AgentRun[]>([]);
+  const [allSessions, setAllSessions] = useState<AgentRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedSession, setSelectedSession] = useState<AgentRun | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  
+  // Separate scheduled and running sessions
+  const scheduledSessions = allSessions.filter(s => s.status === 'scheduled');
+  const runningSessions = allSessions.filter(s => s.status === 'running');
 
   const loadRunningSessions = async () => {
     try {
       const sessions = await api.listRunningAgentSessions();
-      setRunningSessions(sessions);
+      setAllSessions(sessions);
     } catch (error) {
       console.error('Failed to load running sessions:', error);
       setToast({ message: 'Failed to load running sessions', type: 'error' });
@@ -74,11 +78,31 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
     const seconds = Math.floor((durationMs % (1000 * 60)) / 1000);
     return `${minutes}m ${seconds}s`;
   };
+  
+  const formatScheduledTime = (scheduledTime: string) => {
+    const date = new Date(scheduledTime);
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    
+    if (diffMs < 0) {
+      return 'Starting soon...';
+    }
+    
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+      return `in ${hours}h ${minutes}m`;
+    }
+    return `in ${minutes}m`;
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'running':
         return <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">Running</Badge>;
+      case 'scheduled':
+        return <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-200">Scheduled</Badge>;
       case 'pending':
         return <Badge variant="secondary">Pending</Badge>;
       default:
@@ -126,7 +150,7 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
           )}
           <Play className="h-5 w-5" />
           <h2 className="text-lg font-semibold">Running Agent Sessions</h2>
-          <Badge variant="secondary">{runningSessions.length}</Badge>
+          <Badge variant="secondary">{allSessions.length}</Badge>
         </div>
         <Button
           variant="outline"
@@ -140,18 +164,25 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
         </Button>
       </div>
 
-      {runningSessions.length === 0 ? (
+      {allSessions.length === 0 ? (
         <Card>
           <CardContent className="flex items-center justify-center p-8">
             <div className="text-center space-y-2">
               <Clock className="h-8 w-8 mx-auto text-muted-foreground" />
-              <p className="text-muted-foreground">No agent sessions are currently running</p>
+              <p className="text-muted-foreground">No agent sessions are currently running or scheduled</p>
             </div>
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {runningSessions.map((session) => (
+        <div className="space-y-6">
+          {/* Scheduled Sessions Section */}
+          {scheduledSessions.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Clock className="h-4 w-4 text-blue-600" />
+                <h3 className="text-sm font-medium text-muted-foreground">Scheduled ({scheduledSessions.length})</h3>
+              </div>
+              {scheduledSessions.map((session) => (
             <motion.div
               key={session.id}
               initial={{ opacity: 0, y: 20 }}
@@ -214,9 +245,11 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
                         <p className="font-medium">{session.model}</p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground">Duration</p>
+                        <p className="text-muted-foreground">{session.status === 'scheduled' ? 'Starts' : 'Duration'}</p>
                         <p className="font-medium">
-                          {session.process_started_at 
+                          {session.status === 'scheduled' && session.scheduled_start_time
+                            ? formatScheduledTime(session.scheduled_start_time)
+                            : session.process_started_at 
                             ? formatDuration(session.process_started_at)
                             : 'Unknown'
                           }
@@ -244,6 +277,113 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
               </Card>
             </motion.div>
           ))}
+            </div>
+          )}
+          
+          {/* Running Sessions Section */}
+          {runningSessions.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Play className="h-4 w-4 text-green-600" />
+                <h3 className="text-sm font-medium text-muted-foreground">Running ({runningSessions.length})</h3>
+              </div>
+              {runningSessions.map((session) => (
+                <motion.div
+                  key={session.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Card className="hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
+                            <Bot className="h-5 w-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base">{session.agent_name}</CardTitle>
+                            <div className="flex items-center space-x-2 mt-1">
+                              {getStatusBadge(session.status)}
+                              {session.pid && (
+                                <Badge variant="outline" className="text-xs">
+                                  <Cpu className="h-3 w-3 mr-1" />
+                                  PID {session.pid}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedSession(session)}
+                            className="flex items-center space-x-2"
+                          >
+                            <Eye className="h-4 w-4" />
+                            <span>View Output</span>
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => session.id && killSession(session.id, session.agent_name)}
+                            className="flex items-center space-x-2"
+                          >
+                            <Square className="h-4 w-4" />
+                            <span>Stop</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Task</p>
+                          <p className="text-sm font-medium truncate">{session.task}</p>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-muted-foreground">Model</p>
+                            <p className="font-medium">{session.model}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">{session.status === 'scheduled' ? 'Starts' : 'Duration'}</p>
+                            <p className="font-medium">
+                              {session.status === 'scheduled' && session.scheduled_start_time
+                                ? formatScheduledTime(session.scheduled_start_time)
+                                : session.process_started_at 
+                                ? formatDuration(session.process_started_at)
+                                : 'Unknown'
+                              }
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <p className="text-sm text-muted-foreground">Project Path</p>
+                          <p className="text-xs font-mono bg-muted px-2 py-1 rounded truncate">
+                            {session.project_path}
+                          </p>
+                        </div>
+                        
+                        {session.session_id && (
+                          <div>
+                            <p className="text-sm text-muted-foreground">Session ID</p>
+                            <p className="text-xs font-mono bg-muted px-2 py-1 rounded truncate">
+                              {session.session_id}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

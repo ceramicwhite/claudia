@@ -1487,7 +1487,11 @@ pub async fn list_running_sessions(db: State<'_, AgentDb>) -> Result<Vec<AgentRu
 
     let mut stmt = conn.prepare(
         "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at 
-         FROM agent_runs WHERE status = 'running' ORDER BY process_started_at DESC"
+         FROM agent_runs WHERE status IN ('running', 'scheduled') ORDER BY 
+         CASE 
+           WHEN status = 'scheduled' THEN scheduled_start_time 
+           ELSE process_started_at 
+         END DESC"
     ).map_err(|e| e.to_string())?;
 
     let runs = stmt
@@ -1551,17 +1555,20 @@ pub async fn kill_agent_session(
 
     // If registry kill didn't work, try fallback with PID from database
     if !killed_via_registry {
-        let pid_result = {
+        let (pid_result, status) = {
             let conn = db.0.lock().map_err(|e| e.to_string())?;
             conn.query_row(
-                "SELECT pid FROM agent_runs WHERE id = ?1 AND status = 'running'",
+                "SELECT pid, status FROM agent_runs WHERE id = ?1 AND status IN ('running', 'scheduled')",
                 params![run_id],
-                |row| row.get::<_, Option<i64>>(0),
+                |row| Ok((row.get::<_, Option<i64>>(0)?, row.get::<_, String>(1)?)),
             )
             .map_err(|e| e.to_string())?
         };
 
-        if let Some(pid) = pid_result {
+        // If it's a scheduled run, just cancel it
+        if status == "scheduled" {
+            info!("Cancelling scheduled agent run {}", run_id);
+        } else if let Some(pid) = pid_result {
             info!("Attempting fallback kill for PID {} from database", pid);
             let _ = registry.0.kill_process_by_pid(run_id, pid as u32)?;
         }

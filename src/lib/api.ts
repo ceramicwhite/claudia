@@ -217,9 +217,10 @@ export interface AgentRun {
   model: string;
   project_path: string;
   session_id: string;
-  status: string; // 'pending', 'running', 'completed', 'failed', 'cancelled'
+  status: string; // 'pending', 'running', 'completed', 'failed', 'cancelled', 'scheduled'
   pid?: number;
   process_started_at?: string;
+  scheduled_start_time?: string;
   created_at: string;
   completed_at?: string;
 }
