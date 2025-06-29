@@ -428,9 +428,6 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
               onSelect={(value) => updateDateTime({ day: value as number })}
             />
           </div>
-          <p className="text-xs text-muted-foreground text-center mt-1">
-            Year: {dateTimeComponents.year}
-          </p>
         </div>
 
         {/* Time Selection */}
