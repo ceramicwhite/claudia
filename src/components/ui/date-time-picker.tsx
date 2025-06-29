@@ -205,6 +205,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
     const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
     const dropdownRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
+    const isInteractingRef = useRef(false);
     
     // Calculate dropdown position
     useEffect(() => {
@@ -212,13 +213,13 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
       
       const rect = buttonRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
       const dropdownHeight = Math.min(300, items.length * 36 + 8); // Approximate height
       
+      // Always position below unless there's absolutely no space
       let top = rect.bottom + 4;
       
-      // If not enough space below, position above
-      if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
+      // Only position above if there's not enough space below AND more space above
+      if (spaceBelow < 100 && rect.top > spaceBelow) {
         top = rect.top - dropdownHeight - 4;
       }
       
@@ -234,6 +235,9 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
       if (!isOpen) return;
       
       const handleClickOutside = (event: MouseEvent) => {
+        // Don't close if we're interacting with the dropdown
+        if (isInteractingRef.current) return;
+        
         if (
           dropdownRef.current &&
           buttonRef.current &&
@@ -244,15 +248,28 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         }
       };
       
+      const handleMouseUp = () => {
+        // Reset interaction flag on global mouse up
+        isInteractingRef.current = false;
+      };
+      
       document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+      document.addEventListener("mouseup", handleMouseUp);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+        document.removeEventListener("mouseup", handleMouseUp);
+      };
     }, [isOpen]);
     
-    // Close on scroll
+    // Close on scroll (but not when scrolling inside the dropdown)
     useEffect(() => {
       if (!isOpen) return;
       
-      const handleScroll = () => {
+      const handleScroll = (e: Event) => {
+        // Don't close if scrolling inside the dropdown
+        if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) {
+          return;
+        }
         setIsOpen(false);
       };
       
@@ -282,6 +299,12 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
               width: `${dropdownPosition.width}px`,
               maxHeight: 'min(300px, calc(100vh - 20px))',
               overflowY: 'auto'
+            }}
+            onMouseDown={() => {
+              isInteractingRef.current = true;
+            }}
+            onMouseUp={() => {
+              isInteractingRef.current = false;
             }}
           >
             <div className="p-1">
