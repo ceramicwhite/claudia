@@ -508,82 +508,6 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
             )}
           </div>
           
-          {/* Cancelled Sessions Section */}
-          <div className="space-y-3">
-            <button
-              onClick={() => toggleSection('cancelled')}
-              className="flex items-center space-x-2 w-full hover:opacity-80 transition-opacity"
-            >
-              <XCircle className="h-5 w-5 text-gray-600" />
-              <h3 className="text-base font-medium text-muted-foreground">Cancelled ({cancelledSessions.length})</h3>
-              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${sectionsExpanded.cancelled ? '' : '-rotate-90'}`} />
-            </button>
-            {sectionsExpanded.cancelled && cancelledSessions.length > 0 && (
-              <div className="space-y-3">
-              {cancelledSessions.map((session) => (
-                <motion.div
-                  key={session.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Card className="hover:shadow-md transition-shadow">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="flex items-center justify-center w-8 h-8 bg-gray-100 rounded-full">
-                            <Bot className="h-5 w-5 text-gray-600" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-base">{session.agent_name}</CardTitle>
-                            <div className="flex items-center space-x-2 mt-1">
-                              {getStatusBadge(session.status)}
-                            </div>
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSelectedSession(session)}
-                          className="flex items-center space-x-2"
-                        >
-                          <Eye className="h-4 w-4" />
-                          <span>View Output</span>
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="space-y-2">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Task</p>
-                          <p className="text-sm font-medium truncate">{session.task}</p>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <p className="text-muted-foreground">Model</p>
-                            <p className="font-medium">{session.model}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Cancelled At</p>
-                            <p className="font-medium">
-                              {session.completed_at
-                                ? new Date(session.completed_at).toLocaleString()
-                                : 'Unknown'
-                              }
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-              </div>
-            )}
-          </div>
-          
           {/* Failed Sessions Section */}
           <div className="space-y-3">
             <button
@@ -643,6 +567,82 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
                           </div>
                           <div>
                             <p className="text-muted-foreground">Failed At</p>
+                            <p className="font-medium">
+                              {session.completed_at
+                                ? new Date(session.completed_at).toLocaleString()
+                                : 'Unknown'
+                              }
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+              </div>
+            )}
+          </div>
+          
+          {/* Cancelled Sessions Section */}
+          <div className="space-y-3">
+            <button
+              onClick={() => toggleSection('cancelled')}
+              className="flex items-center space-x-2 w-full hover:opacity-80 transition-opacity"
+            >
+              <XCircle className="h-5 w-5 text-gray-600" />
+              <h3 className="text-base font-medium text-muted-foreground">Cancelled ({cancelledSessions.length})</h3>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${sectionsExpanded.cancelled ? '' : '-rotate-90'}`} />
+            </button>
+            {sectionsExpanded.cancelled && cancelledSessions.length > 0 && (
+              <div className="space-y-3">
+              {cancelledSessions.map((session) => (
+                <motion.div
+                  key={session.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Card className="hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="flex items-center justify-center w-8 h-8 bg-gray-100 rounded-full">
+                            <Bot className="h-5 w-5 text-gray-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base">{session.agent_name}</CardTitle>
+                            <div className="flex items-center space-x-2 mt-1">
+                              {getStatusBadge(session.status)}
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedSession(session)}
+                          className="flex items-center space-x-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          <span>View Output</span>
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Task</p>
+                          <p className="text-sm font-medium truncate">{session.task}</p>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-muted-foreground">Model</p>
+                            <p className="font-medium">{session.model}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Cancelled At</p>
                             <p className="font-medium">
                               {session.completed_at
                                 ? new Date(session.completed_at).toLocaleString()
