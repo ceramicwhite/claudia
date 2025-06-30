@@ -105,9 +105,14 @@ pub struct AgentDb(pub Mutex<Connection>);
 /// Real-time JSONL reading and processing functions
 impl AgentRunMetrics {
     /// Calculate metrics from JSONL content
-    pub fn from_jsonl(jsonl_content: &str) -> Self {
+    pub fn from_jsonl(jsonl_content: &str, model: &str) -> Self {
         let mut total_tokens = 0i64;
+        let mut total_input_tokens = 0i64;
+        let mut total_output_tokens = 0i64;
+        let mut total_cache_creation_tokens = 0i64;
+        let mut total_cache_read_tokens = 0i64;
         let mut cost_usd = 0.0f64;
+        let mut has_cost_field = false;
         let mut message_count = 0i64;
         let mut start_time: Option<chrono::DateTime<chrono::Utc>> = None;
         let mut end_time: Option<chrono::DateTime<chrono::Utc>> = None;
@@ -137,18 +142,75 @@ impl AgentRunMetrics {
                 if let Some(usage) = usage {
                     if let Some(input_tokens) = usage.get("input_tokens").and_then(|t| t.as_i64()) {
                         total_tokens += input_tokens;
+                        total_input_tokens += input_tokens;
                     }
                     if let Some(output_tokens) = usage.get("output_tokens").and_then(|t| t.as_i64())
                     {
                         total_tokens += output_tokens;
+                        total_output_tokens += output_tokens;
+                    }
+                    if let Some(cache_creation) = usage.get("cache_creation_input_tokens").and_then(|t| t.as_i64()) {
+                        total_cache_creation_tokens += cache_creation;
+                    }
+                    if let Some(cache_read) = usage.get("cache_read_input_tokens").and_then(|t| t.as_i64()) {
+                        total_cache_read_tokens += cache_read;
                     }
                 }
 
                 // Extract cost information
                 if let Some(cost) = json.get("cost").and_then(|c| c.as_f64()) {
                     cost_usd += cost;
+                    has_cost_field = true;
                 }
             }
+        }
+
+        // If no cost field was found but we have tokens, calculate the cost
+        if !has_cost_field && total_tokens > 0 {
+            // Claude 4 pricing constants (per million tokens)
+            const OPUS_4_INPUT_PRICE: f64 = 15.0;
+            const OPUS_4_OUTPUT_PRICE: f64 = 75.0;
+            const OPUS_4_CACHE_WRITE_PRICE: f64 = 18.75;
+            const OPUS_4_CACHE_READ_PRICE: f64 = 1.50;
+
+            const SONNET_4_INPUT_PRICE: f64 = 3.0;
+            const SONNET_4_OUTPUT_PRICE: f64 = 15.0;
+            const SONNET_4_CACHE_WRITE_PRICE: f64 = 3.75;
+            const SONNET_4_CACHE_READ_PRICE: f64 = 0.30;
+
+            // Calculate cost based on model
+            let (input_price, output_price, cache_write_price, cache_read_price) =
+                if model.contains("opus-4") || model.contains("claude-opus-4") {
+                    (
+                        OPUS_4_INPUT_PRICE,
+                        OPUS_4_OUTPUT_PRICE,
+                        OPUS_4_CACHE_WRITE_PRICE,
+                        OPUS_4_CACHE_READ_PRICE,
+                    )
+                } else if model.contains("sonnet-4") || model.contains("claude-sonnet-4") {
+                    (
+                        SONNET_4_INPUT_PRICE,
+                        SONNET_4_OUTPUT_PRICE,
+                        SONNET_4_CACHE_WRITE_PRICE,
+                        SONNET_4_CACHE_READ_PRICE,
+                    )
+                } else {
+                    // Default to sonnet pricing for unknown models
+                    (
+                        SONNET_4_INPUT_PRICE,
+                        SONNET_4_OUTPUT_PRICE,
+                        SONNET_4_CACHE_WRITE_PRICE,
+                        SONNET_4_CACHE_READ_PRICE,
+                    )
+                };
+
+            // Calculate cost (prices are per million tokens)
+            let input_cost = (total_input_tokens as f64 / 1_000_000.0) * input_price;
+            let output_cost = (total_output_tokens as f64 / 1_000_000.0) * output_price;
+            let cache_write_cost = (total_cache_creation_tokens as f64 / 1_000_000.0) * cache_write_price;
+            let cache_read_cost = (total_cache_read_tokens as f64 / 1_000_000.0) * cache_read_price;
+
+            cost_usd = input_cost + output_cost + cache_write_cost + cache_read_cost;
         }
 
         let duration_ms = match (start_time, end_time) {
@@ -202,7 +264,7 @@ pub async fn read_session_jsonl(session_id: &str, project_path: &str) -> Result<
 pub async fn get_agent_run_with_metrics(run: AgentRun) -> AgentRunWithMetrics {
     match read_session_jsonl(&run.session_id, &run.project_path).await {
         Ok(jsonl_content) => {
-            let metrics = AgentRunMetrics::from_jsonl(&jsonl_content);
+            let metrics = AgentRunMetrics::from_jsonl(&jsonl_content, &run.model);
             AgentRunWithMetrics {
                 run,
                 metrics: Some(metrics),
