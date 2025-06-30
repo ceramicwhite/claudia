@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Bot, Eye, Square, Cpu, RefreshCw, DollarSign, Hash } from 'lucide-react';
+import { Bot, Eye, Square, Cpu, RefreshCw, Play, RotateCw, Edit3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,9 @@ interface SessionCardProps {
   index?: number;
   onViewOutput: (session: AgentRun | AgentRunWithMetrics) => void;
   onStop?: (runId: number, agentName: string) => void;
+  onResume?: (session: AgentRun | AgentRunWithMetrics) => void;
+  onRetry?: (session: AgentRun | AgentRunWithMetrics) => void;
+  onEdit?: (session: AgentRun | AgentRunWithMetrics) => void;
   showStopButton?: boolean;
   statusConfig: {
     bgColor: string;
@@ -28,6 +31,9 @@ export const SessionCard: React.FC<SessionCardProps> = ({
   index = 0,
   onViewOutput,
   onStop,
+  onResume,
+  onRetry,
+  onEdit,
   showStopButton = false,
   statusConfig
 }) => {
@@ -99,6 +105,16 @@ export const SessionCard: React.FC<SessionCardProps> = ({
   };
 
   const hasMetrics = isAgentRunWithMetrics(session) && session.metrics;
+  
+  // Check if usage limit has been reached for resume button
+  const canResume = () => {
+    if (session.status === 'paused_usage_limit' && session.usage_limit_reset_time) {
+      const resetTime = new Date(session.usage_limit_reset_time);
+      const now = new Date();
+      return now >= resetTime;
+    }
+    return false;
+  };
 
   return (
     <motion.div
@@ -137,6 +153,49 @@ export const SessionCard: React.FC<SessionCardProps> = ({
                 <Eye className="h-4 w-4" />
                 <span>View Output</span>
               </Button>
+              
+              {/* Resume button for paused sessions */}
+              {session.status === 'paused_usage_limit' && onResume && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onResume(session)}
+                  disabled={!canResume()}
+                  className="flex items-center space-x-2"
+                  title={!canResume() ? `Usage limit resets at ${new Date(session.usage_limit_reset_time!).toLocaleString()}` : 'Resume agent execution'}
+                >
+                  <Play className="h-4 w-4" />
+                  <span>Resume</span>
+                </Button>
+              )}
+              
+              {/* Retry button for failed/cancelled sessions */}
+              {['failed', 'cancelled'].includes(session.status) && onRetry && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onRetry(session)}
+                  className="flex items-center space-x-2"
+                >
+                  <RotateCw className="h-4 w-4" />
+                  <span>Retry</span>
+                </Button>
+              )}
+              
+              {/* Edit button for failed/cancelled sessions */}
+              {['failed', 'cancelled'].includes(session.status) && onEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onEdit(session)}
+                  className="flex items-center space-x-2"
+                >
+                  <Edit3 className="h-4 w-4" />
+                  <span>Edit</span>
+                </Button>
+              )}
+              
+              {/* Stop button for running sessions */}
               {showStopButton && onStop && session.id && (
                 <Button
                   variant="destructive"
@@ -192,7 +251,6 @@ export const SessionCard: React.FC<SessionCardProps> = ({
                 {session.metrics.cost_usd && (
                   <div>
                     <p className="text-muted-foreground flex items-center gap-1">
-                      <DollarSign className="h-3 w-3" />
                       Cost
                     </p>
                     <p className="font-medium">{formatCurrency(session.metrics.cost_usd)}</p>
@@ -201,7 +259,6 @@ export const SessionCard: React.FC<SessionCardProps> = ({
                 {session.metrics.total_tokens && (
                   <div>
                     <p className="text-muted-foreground flex items-center gap-1">
-                      <Hash className="h-3 w-3" />
                       Tokens
                     </p>
                     <p className="font-medium">{formatTokens(session.metrics.total_tokens)}</p>

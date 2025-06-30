@@ -13,9 +13,10 @@ interface RunningSessionsViewProps {
   className?: string;
   showBackButton?: boolean;
   onBack?: () => void;
+  onEditSession?: (session: AgentRunWithMetrics) => void;
 }
 
-export function RunningSessionsView({ className, showBackButton = false, onBack }: RunningSessionsViewProps) {
+export function RunningSessionsView({ className, showBackButton = false, onBack, onEditSession }: RunningSessionsViewProps) {
   const [allSessions, setAllSessions] = useState<AgentRunWithMetrics[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -86,6 +87,49 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
     }
   };
 
+  const handleResume = async (session: AgentRunWithMetrics) => {
+    try {
+      // Execute the agent with the same parameters
+      await api.executeAgent(
+        session.agent_id,
+        session.project_path,
+        session.task,
+        session.model,
+        session.auto_resume_enabled
+      );
+      
+      setToast({ message: `${session.agent_name} has been resumed`, type: 'success' });
+      await loadRunningSessions();
+    } catch (error) {
+      console.error('Failed to resume session:', error);
+      setToast({ message: 'Failed to resume session', type: 'error' });
+    }
+  };
+
+  const handleRetry = async (session: AgentRunWithMetrics) => {
+    try {
+      // Execute the agent with the same parameters
+      await api.executeAgent(
+        session.agent_id,
+        session.project_path,
+        session.task,
+        session.model,
+        session.auto_resume_enabled
+      );
+      
+      setToast({ message: `${session.agent_name} has been retried`, type: 'success' });
+      await loadRunningSessions();
+    } catch (error) {
+      console.error('Failed to retry session:', error);
+      setToast({ message: 'Failed to retry session', type: 'error' });
+    }
+  };
+
+  const handleEdit = (session: AgentRunWithMetrics) => {
+    if (onEditSession) {
+      onEditSession(session);
+    }
+  };
 
   useEffect(() => {
     loadRunningSessions();
@@ -227,6 +271,7 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
                     session={session}
                     index={index}
                     onViewOutput={setSelectedSession}
+                    onResume={handleResume}
                     showStopButton={false}
                     statusConfig={{
                       bgColor: 'bg-orange-100',
@@ -256,6 +301,8 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
                     session={session}
                     index={index}
                     onViewOutput={setSelectedSession}
+                    onRetry={handleRetry}
+                    onEdit={handleEdit}
                     showStopButton={false}
                     statusConfig={{
                       bgColor: 'bg-red-100',
@@ -285,6 +332,8 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
                     session={session}
                     index={index}
                     onViewOutput={setSelectedSession}
+                    onRetry={handleRetry}
+                    onEdit={handleEdit}
                     showStopButton={false}
                     statusConfig={{
                       bgColor: 'bg-gray-100',

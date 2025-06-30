@@ -80,6 +80,7 @@ export const CCAgents: React.FC<CCAgentsProps> = ({ onBack, className }) => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editSession, setEditSession] = useState<AgentRunWithMetrics | null>(null);
 
   const AGENTS_PER_PAGE = 9; // 3x3 grid
 
@@ -187,6 +188,21 @@ export const CCAgents: React.FC<CCAgentsProps> = ({ onBack, className }) => {
   const handleExecutionComplete = async () => {
     // Reload runs when returning from execution
     await loadRuns();
+    // Clear edit session if any
+    setEditSession(null);
+  };
+
+  const handleEditSession = async (session: AgentRunWithMetrics) => {
+    try {
+      // Load the agent for this session
+      const agent = await api.getAgent(session.agent_id);
+      setSelectedAgent(agent);
+      setEditSession(session);
+      setView("execute");
+    } catch (err) {
+      console.error("Failed to load agent for editing:", err);
+      setToast({ message: "Failed to load agent for editing", type: "error" });
+    }
   };
 
   const handleExportAgent = async (agent: Agent) => {
@@ -283,6 +299,9 @@ export const CCAgents: React.FC<CCAgentsProps> = ({ onBack, className }) => {
           setView("list");
           handleExecutionComplete();
         }}
+        initialTask={editSession?.task}
+        initialModel={editSession?.model}
+        initialProjectPath={editSession?.project_path}
       />
     );
   }
@@ -557,7 +576,7 @@ export const CCAgents: React.FC<CCAgentsProps> = ({ onBack, className }) => {
                 transition={{ duration: 0.2 }}
                 className="pt-6"
               >
-                <RunningSessionsView />
+                <RunningSessionsView onEditSession={handleEditSession} />
               </motion.div>
             )}
           </AnimatePresence>

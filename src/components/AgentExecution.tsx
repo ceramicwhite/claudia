@@ -41,6 +41,18 @@ interface AgentExecutionProps {
    * Optional className for styling
    */
   className?: string;
+  /**
+   * Optional initial task to prefill
+   */
+  initialTask?: string;
+  /**
+   * Optional initial model to prefill
+   */
+  initialModel?: string;
+  /**
+   * Optional initial project path to prefill
+   */
+  initialProjectPath?: string;
 }
 
 export interface ClaudeStreamMessage {
@@ -70,10 +82,13 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
   agent,
   onBack,
   className,
+  initialTask,
+  initialModel,
+  initialProjectPath,
 }) => {
-  const [projectPath, setProjectPath] = useState("");
-  const [task, setTask] = useState(agent.default_task || "");
-  const [model, setModel] = useState(agent.model || "sonnet");
+  const [projectPath, setProjectPath] = useState(initialProjectPath || "");
+  const [task, setTask] = useState(initialTask || agent.default_task || "");
+  const [model, setModel] = useState(initialModel || agent.model || "sonnet");
   const [scheduledStartTime, setScheduledStartTime] = useState<string | undefined>(undefined);
   const [autoResumeEnabled, setAutoResumeEnabled] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
