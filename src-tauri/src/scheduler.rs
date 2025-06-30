@@ -85,7 +85,8 @@ async fn check_and_execute_scheduled_agents(app: &AppHandle) -> Result<(), Strin
         
         let mut stmt = conn.prepare(
             "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, 
-                    status, pid, process_started_at, scheduled_start_time, created_at, completed_at 
+                    status, pid, process_started_at, scheduled_start_time, created_at, completed_at,
+                    usage_limit_reset_time, auto_resume_enabled, resume_count, parent_run_id 
              FROM agent_runs 
              WHERE status = 'scheduled' 
                AND scheduled_start_time IS NOT NULL 
@@ -109,6 +110,10 @@ async fn check_and_execute_scheduled_agents(app: &AppHandle) -> Result<(), Strin
                 scheduled_start_time: row.get(11)?,
                 created_at: row.get(12)?,
                 completed_at: row.get(13)?,
+                usage_limit_reset_time: row.get(14)?,
+                auto_resume_enabled: row.get(15)?,
+                resume_count: row.get(16)?,
+                parent_run_id: row.get(17)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -151,6 +156,7 @@ async fn check_and_execute_scheduled_agents(app: &AppHandle) -> Result<(), Strin
             project_path,
             task,
             Some(model),
+            None, // auto_resume_enabled - scheduled runs don't need this
             db.clone(),
             registry.clone()
         ).await {

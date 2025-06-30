@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Clock, Hash, Bot } from "lucide-react";
+import { Play, Clock, Hash, Bot, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/pagination";
 import { cn } from "@/lib/utils";
 import { formatISOTimestamp } from "@/lib/date-utils";
-import type { AgentRunWithMetrics } from "@/lib/api";
+import { api, type AgentRunWithMetrics } from "@/lib/api";
 import { AGENT_ICONS } from "./CCAgents";
 import { AgentRunOutputViewer } from "./AgentRunOutputViewer";
 
@@ -158,24 +159,64 @@ export const AgentRunsList: React.FC<AgentRunsListProps> = ({
                             <span>{formatTokens(run.metrics.total_tokens)}</span>
                           </div>
                         )}
+                        
+                        {run.status === "paused_usage_limit" && run.usage_limit_reset_time && (
+                          <span className="text-orange-600">
+                            Resets: {new Date(run.usage_limit_reset_time).toLocaleString()}
+                          </span>
+                        )}
                       </div>
                     </div>
                     
                     <div className="flex-shrink-0">
-                      <Badge 
-                        variant={
-                          run.status === "completed" ? "default" :
-                          run.status === "running" ? "secondary" :
-                          run.status === "failed" ? "destructive" :
-                          "outline"
-                        }
-                        className="text-xs"
-                      >
-                        {run.status === "completed" ? "Completed" :
-                         run.status === "running" ? "Running" :
-                         run.status === "failed" ? "Failed" :
-                         "Pending"}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge 
+                          variant={
+                            run.status === "completed" ? "default" :
+                            run.status === "running" ? "secondary" :
+                            run.status === "failed" ? "destructive" :
+                            run.status === "paused_usage_limit" ? "outline" :
+                            "outline"
+                          }
+                          className="text-xs"
+                        >
+                          {run.status === "completed" ? "Completed" :
+                           run.status === "running" ? "Running" :
+                           run.status === "failed" ? "Failed" :
+                           run.status === "paused_usage_limit" ? "Usage Limit" :
+                           "Pending"}
+                        </Badge>
+                        
+                        {run.status === "paused_usage_limit" && run.usage_limit_reset_time && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-xs px-2"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                // Resume the agent by creating a new scheduled run
+                                await api.createScheduledAgentRun(
+                                  run.agent_id,
+                                  run.project_path,
+                                  run.task,
+                                  run.model,
+                                  new Date().toISOString() // Run immediately
+                                );
+                                alert("Agent has been resumed");
+                                // Refresh the list if there's a callback
+                                window.location.reload();
+                              } catch (error) {
+                                console.error("Failed to resume agent:", error);
+                                alert("Failed to resume agent");
+                              }
+                            }}
+                          >
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            Resume
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </CardContent>

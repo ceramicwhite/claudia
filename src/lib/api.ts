@@ -217,12 +217,16 @@ export interface AgentRun {
   model: string;
   project_path: string;
   session_id: string;
-  status: string; // 'pending', 'running', 'completed', 'failed', 'cancelled', 'scheduled'
+  status: string; // 'pending', 'running', 'completed', 'failed', 'cancelled', 'scheduled', 'paused_usage_limit'
   pid?: number;
   process_started_at?: string;
   scheduled_start_time?: string;
   created_at: string;
   completed_at?: string;
+  usage_limit_reset_time?: string; // ISO 8601 datetime when usage limit resets
+  auto_resume_enabled: boolean;
+  resume_count: number;
+  parent_run_id?: number; // ID of the original run if this is a resumed run
 }
 
 export interface AgentRunMetrics {
@@ -241,11 +245,16 @@ export interface AgentRunWithMetrics {
   model: string;
   project_path: string;
   session_id: string;
-  status: string; // 'pending', 'running', 'completed', 'failed', 'cancelled'
+  status: string; // 'pending', 'running', 'completed', 'failed', 'cancelled', 'scheduled', 'paused_usage_limit'
   pid?: number;
   process_started_at?: string;
+  scheduled_start_time?: string;
   created_at: string;
   completed_at?: string;
+  usage_limit_reset_time?: string; // ISO 8601 datetime when usage limit resets
+  auto_resume_enabled: boolean;
+  resume_count: number;
+  parent_run_id?: number; // ID of the original run if this is a resumed run
   metrics?: AgentRunMetrics;
   output?: string; // Real-time JSONL content
 }
@@ -862,9 +871,9 @@ export const api = {
    * @param model - Optional model override
    * @returns Promise resolving to the run ID when execution starts
    */
-  async executeAgent(agentId: number, projectPath: string, task: string, model?: string): Promise<number> {
+  async executeAgent(agentId: number, projectPath: string, task: string, model?: string, autoResumeEnabled?: boolean): Promise<number> {
     try {
-      return await invoke<number>('execute_agent', { agentId, projectPath, task, model });
+      return await invoke<number>('execute_agent', { agentId, projectPath, task, model, autoResumeEnabled });
     } catch (error) {
       console.error("Failed to execute agent:", error);
       // Return a sentinel value to indicate error

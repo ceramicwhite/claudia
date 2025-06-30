@@ -47,12 +47,16 @@ pub struct AgentRun {
     pub model: String,
     pub project_path: String,
     pub session_id: String, // UUID session ID from Claude Code
-    pub status: String,     // 'pending', 'running', 'completed', 'failed', 'cancelled', 'scheduled'
+    pub status: String,     // 'pending', 'running', 'completed', 'failed', 'cancelled', 'scheduled', 'paused_usage_limit'
     pub pid: Option<u32>,
     pub process_started_at: Option<String>,
     pub scheduled_start_time: Option<String>, // ISO 8601 datetime string for scheduled runs
     pub created_at: String,
     pub completed_at: Option<String>,
+    pub usage_limit_reset_time: Option<String>, // ISO 8601 datetime when usage limit resets
+    pub auto_resume_enabled: bool,
+    pub resume_count: i64,
+    pub parent_run_id: Option<i64>, // ID of the original run if this is a resumed run
 }
 
 /// Represents runtime metrics calculated from JSONL
@@ -316,6 +320,24 @@ pub fn init_database(app: &AppHandle) -> SqliteResult<Connection> {
     // Add scheduled_start_time column to agent_runs table for scheduling individual runs
     let _ = conn.execute(
         "ALTER TABLE agent_runs ADD COLUMN scheduled_start_time TEXT",
+        [],
+    );
+    
+    // Add columns for usage limit tracking and resumption
+    let _ = conn.execute(
+        "ALTER TABLE agent_runs ADD COLUMN usage_limit_reset_time TEXT",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE agent_runs ADD COLUMN auto_resume_enabled BOOLEAN DEFAULT 0",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE agent_runs ADD COLUMN resume_count INTEGER DEFAULT 0",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE agent_runs ADD COLUMN parent_run_id INTEGER",
         [],
     );
 
@@ -669,10 +691,10 @@ pub async fn list_agent_runs(
     let conn = db.0.lock().map_err(|e| e.to_string())?;
 
     let query = if agent_id.is_some() {
-        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at 
+        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at, usage_limit_reset_time, auto_resume_enabled, resume_count, parent_run_id 
          FROM agent_runs WHERE agent_id = ?1 ORDER BY created_at DESC"
     } else {
-        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at 
+        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at, usage_limit_reset_time, auto_resume_enabled, resume_count, parent_run_id 
          FROM agent_runs ORDER BY created_at DESC"
     };
 
@@ -700,6 +722,10 @@ pub async fn list_agent_runs(
             scheduled_start_time: row.get(11)?,
             created_at: row.get(12)?,
             completed_at: row.get(13)?,
+            usage_limit_reset_time: row.get(14)?,
+            auto_resume_enabled: row.get(15)?,
+            resume_count: row.get(16)?,
+            parent_run_id: row.get(17)?,
         })
     };
 
@@ -722,7 +748,7 @@ pub async fn get_agent_run(db: State<'_, AgentDb>, id: i64) -> Result<AgentRun, 
 
     let run = conn
         .query_row(
-            "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at 
+            "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at, usage_limit_reset_time, auto_resume_enabled, resume_count, parent_run_id 
              FROM agent_runs WHERE id = ?1",
             params![id],
             |row| {
@@ -741,6 +767,10 @@ pub async fn get_agent_run(db: State<'_, AgentDb>, id: i64) -> Result<AgentRun, 
                     scheduled_start_time: row.get(11)?,
                     created_at: row.get(12)?,
                     completed_at: row.get(13)?,
+                    usage_limit_reset_time: row.get(14)?,
+                    auto_resume_enabled: row.get(15)?,
+                    resume_count: row.get(16)?,
+                    parent_run_id: row.get(17)?,
                 })
             },
         )
@@ -784,6 +814,7 @@ pub async fn execute_agent(
     project_path: String,
     task: String,
     model: Option<String>,
+    auto_resume_enabled: Option<bool>,
     db: State<'_, AgentDb>,
     registry: State<'_, crate::process::ProcessRegistryState>,
 ) -> Result<i64, String> {
@@ -797,8 +828,8 @@ pub async fn execute_agent(
     let run_id = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         conn.execute(
-            "INSERT INTO agent_runs (agent_id, agent_name, agent_icon, task, model, project_path, session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![agent_id, agent.name, agent.icon, task, execution_model, project_path, ""],
+            "INSERT INTO agent_runs (agent_id, agent_name, agent_icon, task, model, project_path, session_id, auto_resume_enabled, resume_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![agent_id, agent.name, agent.icon, task, execution_model, project_path, "", auto_resume_enabled.unwrap_or(false), 0],
         )
         .map_err(|e| e.to_string())?;
         conn.last_insert_rowid()
@@ -1463,12 +1494,61 @@ pub async fn execute_agent(
         // Wait for process completion and update status
         info!("✅ Claude process execution monitoring complete");
 
-        // Update the run record with session ID and mark as completed - open a new connection
-        if let Ok(conn) = Connection::open(&db_path) {
-            let _ = conn.execute(
-                "UPDATE agent_runs SET session_id = ?1, status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?2",
-                params![extracted_session_id, run_id],
-            );
+        // Check the output for usage limit errors
+        let final_output = if let Ok(output) = live_output.lock() {
+            output.clone()
+        } else {
+            String::new()
+        };
+
+        // Check for usage limit error
+        let is_usage_limit_error = if let Some(reset_time) = parse_usage_limit_error(&final_output) {
+            info!("🚫 Detected usage limit error. Reset time: {}", reset_time);
+            
+            // Update the run record with usage limit status - open a new connection
+            if let Ok(conn) = Connection::open(&db_path) {
+                // First check if auto-resume is enabled
+                let auto_resume = conn.query_row(
+                    "SELECT auto_resume_enabled FROM agent_runs WHERE id = ?1",
+                    params![run_id],
+                    |row| row.get::<_, bool>(0)
+                ).unwrap_or(false);
+                
+                if auto_resume {
+                    // Schedule the resume
+                    let _ = conn.execute(
+                        "UPDATE agent_runs SET session_id = ?1, status = 'paused_usage_limit', usage_limit_reset_time = ?2 WHERE id = ?3",
+                        params![extracted_session_id, reset_time, run_id],
+                    );
+                    
+                    // Create a scheduled run for the reset time
+                    let _ = conn.execute(
+                        "INSERT INTO agent_runs (agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, scheduled_start_time, auto_resume_enabled, parent_run_id, resume_count) 
+                         SELECT agent_id, agent_name, agent_icon, task, model, project_path, '', 'scheduled', ?1, 1, ?2, resume_count + 1 
+                         FROM agent_runs WHERE id = ?2",
+                        params![reset_time, run_id],
+                    );
+                } else {
+                    // Just mark as paused
+                    let _ = conn.execute(
+                        "UPDATE agent_runs SET session_id = ?1, status = 'paused_usage_limit', usage_limit_reset_time = ?2, completed_at = CURRENT_TIMESTAMP WHERE id = ?3",
+                        params![extracted_session_id, reset_time, run_id],
+                    );
+                }
+            }
+            true
+        } else {
+            false
+        };
+
+        if !is_usage_limit_error {
+            // Update the run record with session ID and mark as completed - open a new connection
+            if let Ok(conn) = Connection::open(&db_path) {
+                let _ = conn.execute(
+                    "UPDATE agent_runs SET session_id = ?1, status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?2",
+                    params![extracted_session_id, run_id],
+                );
+            }
         }
 
         // Cleanup will be handled by the cleanup_finished_processes function
@@ -1486,10 +1566,11 @@ pub async fn list_running_sessions(db: State<'_, AgentDb>) -> Result<Vec<AgentRu
     let conn = db.0.lock().map_err(|e| e.to_string())?;
 
     let mut stmt = conn.prepare(
-        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at 
-         FROM agent_runs WHERE status IN ('running', 'scheduled') ORDER BY 
+        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at, usage_limit_reset_time, auto_resume_enabled, resume_count, parent_run_id 
+         FROM agent_runs WHERE status IN ('running', 'scheduled', 'paused_usage_limit') ORDER BY 
          CASE 
            WHEN status = 'scheduled' THEN scheduled_start_time 
+           WHEN status = 'paused_usage_limit' THEN usage_limit_reset_time
            ELSE process_started_at 
          END DESC"
     ).map_err(|e| e.to_string())?;
@@ -1517,6 +1598,10 @@ pub async fn list_running_sessions(db: State<'_, AgentDb>) -> Result<Vec<AgentRu
                 scheduled_start_time: row.get(11)?,
                 created_at: row.get(12)?,
                 completed_at: row.get(13)?,
+                usage_limit_reset_time: row.get(14)?,
+                auto_resume_enabled: row.get(15)?,
+                resume_count: row.get(16)?,
+                parent_run_id: row.get(17)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -1850,6 +1935,24 @@ pub async fn export_agent_to_file(
     std::fs::write(&file_path, json_data).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(())
+}
+
+/// Helper function to detect and parse usage limit errors
+fn parse_usage_limit_error(output: &str) -> Option<String> {
+    // Check if the output contains the usage limit error pattern
+    if output.contains("Claude AI usage limit reached|") {
+        // Extract the timestamp
+        if let Some(pipe_pos) = output.rfind('|') {
+            let timestamp = &output[pipe_pos + 1..];
+            // Convert epoch to ISO 8601
+            if let Ok(epoch) = timestamp.trim().parse::<i64>() {
+                let datetime = chrono::DateTime::<chrono::Utc>::from_timestamp(epoch, 0)
+                    .map(|dt| dt.to_rfc3339());
+                return datetime;
+            }
+        }
+    }
+    None
 }
 
 /// Get the stored Claude binary path from settings
@@ -2238,7 +2341,7 @@ pub async fn get_scheduled_agent_runs(db: State<'_, AgentDb>) -> Result<Vec<Agen
     
     let mut stmt = conn
         .prepare(
-            "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at 
+            "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at, usage_limit_reset_time, auto_resume_enabled, resume_count, parent_run_id 
              FROM agent_runs 
              WHERE status = 'scheduled' AND scheduled_start_time IS NOT NULL 
              ORDER BY scheduled_start_time ASC"
@@ -2262,6 +2365,10 @@ pub async fn get_scheduled_agent_runs(db: State<'_, AgentDb>) -> Result<Vec<Agen
                 scheduled_start_time: row.get(11)?,
                 created_at: row.get(12)?,
                 completed_at: row.get(13)?,
+                usage_limit_reset_time: row.get(14)?,
+                auto_resume_enabled: row.get(15)?,
+                resume_count: row.get(16)?,
+                parent_run_id: row.get(17)?,
             })
         })
         .map_err(|e| e.to_string())?

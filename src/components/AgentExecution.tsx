@@ -75,6 +75,7 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
   const [task, setTask] = useState(agent.default_task || "");
   const [model, setModel] = useState(agent.model || "sonnet");
   const [scheduledStartTime, setScheduledStartTime] = useState<string | undefined>(undefined);
+  const [autoResumeEnabled, setAutoResumeEnabled] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [messages, setMessages] = useState<ClaudeStreamMessage[]>([]);
   const [rawJsonlOutput, setRawJsonlOutput] = useState<string[]>([]);
@@ -305,7 +306,7 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
       setTotalTokens(0);
 
       // Execute the agent with model override and get run ID
-      runId = await api.executeAgent(agent.id!, projectPath, task, model);
+      runId = await api.executeAgent(agent.id!, projectPath, task, model, autoResumeEnabled);
       
       // Set up event listeners with run ID isolation
       const outputUnlisten = await listen<string>(`agent-output:${runId}`, (event) => {
@@ -720,6 +721,21 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
                   ? `Agent will be queued to run at ${new Date(scheduledStartTime).toLocaleString()}`
                   : "Leave empty to run immediately when you click Execute"}
               </p>
+            </div>
+
+            {/* Auto-Resume on Usage Limit */}
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="auto-resume"
+                checked={autoResumeEnabled}
+                onChange={(e) => setAutoResumeEnabled(e.target.checked)}
+                disabled={isRunning}
+                className="h-4 w-4 rounded border-input bg-background text-primary focus:ring-primary"
+              />
+              <Label htmlFor="auto-resume" className="text-sm font-normal cursor-pointer">
+                Auto-resume when Claude usage limit resets
+              </Label>
             </div>
           </div>
         </div>
