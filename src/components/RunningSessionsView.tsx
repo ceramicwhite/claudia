@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Square, Clock, Cpu, RefreshCw, Eye, ArrowLeft, Bot } from 'lucide-react';
+import { Play, Square, Clock, Cpu, RefreshCw, Eye, ArrowLeft, Bot, Pause } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,9 +22,10 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
   const [selectedSession, setSelectedSession] = useState<AgentRun | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   
-  // Separate scheduled and running sessions
+  // Separate scheduled, running, and paused sessions
   const scheduledSessions = allSessions.filter(s => s.status === 'scheduled');
   const runningSessions = allSessions.filter(s => s.status === 'running');
+  const pausedSessions = allSessions.filter(s => s.status === 'paused_usage_limit');
 
   const loadRunningSessions = async () => {
     try {
@@ -105,6 +106,8 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
         return <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-200">Scheduled</Badge>;
       case 'pending':
         return <Badge variant="secondary">Pending</Badge>;
+      case 'paused_usage_limit':
+        return <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-200">Usage Limit</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -375,6 +378,92 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
                             <p className="text-xs font-mono bg-muted px-2 py-1 rounded truncate">
                               {session.session_id}
                             </p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          )}
+          
+          {/* Paused Sessions Section */}
+          {pausedSessions.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Pause className="h-4 w-4 text-orange-600" />
+                <h3 className="text-sm font-medium text-muted-foreground">Paused - Usage Limit ({pausedSessions.length})</h3>
+              </div>
+              {pausedSessions.map((session) => (
+                <motion.div
+                  key={session.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Card className="hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="flex items-center justify-center w-8 h-8 bg-orange-100 rounded-full">
+                            <Bot className="h-5 w-5 text-orange-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base">{session.agent_name}</CardTitle>
+                            <div className="flex items-center space-x-2 mt-1">
+                              {getStatusBadge(session.status)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedSession(session)}
+                            className="flex items-center space-x-2"
+                          >
+                            <Eye className="h-4 w-4" />
+                            <span>View Output</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Task</p>
+                          <p className="text-sm font-medium truncate">{session.task}</p>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-muted-foreground">Model</p>
+                            <p className="font-medium">{session.model}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Resume Time</p>
+                            <p className="font-medium">
+                              {session.usage_limit_reset_time
+                                ? new Date(session.usage_limit_reset_time).toLocaleString()
+                                : 'Unknown'
+                              }
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <p className="text-sm text-muted-foreground">Project Path</p>
+                          <p className="text-xs font-mono bg-muted px-2 py-1 rounded truncate">
+                            {session.project_path}
+                          </p>
+                        </div>
+                        
+                        {session.auto_resume_enabled && (
+                          <div className="flex items-center space-x-2 text-xs text-orange-600">
+                            <RefreshCw className="h-3 w-3" />
+                            <span>Auto-resume enabled</span>
                           </div>
                         )}
                       </div>
