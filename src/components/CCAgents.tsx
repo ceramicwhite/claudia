@@ -12,8 +12,7 @@ import {
   Upload,
   Globe,
   FileJson,
-  ChevronDown,
-  Clock
+  ChevronDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -448,20 +447,6 @@ export const CCAgents: React.FC<CCAgentsProps> = ({ onBack, className }) => {
                                   <h3 className="text-lg font-semibold mb-2">
                                     {agent.name}
                                   </h3>
-                                  {agent.scheduled_start_time && (
-                                    <div className="flex items-center gap-1 mb-2 text-xs text-primary">
-                                      <Clock className="h-3 w-3" />
-                                      <span>
-                                        Scheduled: {new Date(agent.scheduled_start_time).toLocaleString(undefined, {
-                                          month: 'short',
-                                          day: 'numeric',
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                          hour12: true
-                                        })}
-                                      </span>
-                                    </div>
-                                  )}
                                   <p className="text-xs text-muted-foreground">
                                     Created: {new Date(agent.created_at).toLocaleDateString()}
                                   </p>

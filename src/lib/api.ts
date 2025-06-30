@@ -179,7 +179,6 @@ export interface Agent {
   enable_file_read: boolean;
   enable_file_write: boolean;
   enable_network: boolean;
-  scheduled_start_time?: string; // ISO 8601 datetime string
   created_at: string;
   updated_at: string;
 }
