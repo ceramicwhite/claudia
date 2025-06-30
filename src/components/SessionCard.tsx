@@ -134,7 +134,7 @@ export const SessionCard: React.FC<SessionCardProps> = ({
                 <CardTitle className="text-base">{session.agent_name}</CardTitle>
                 <div className="flex items-center space-x-2 mt-1">
                   {getStatusBadge(session.status)}
-                  {session.pid && (
+                  {session.status === 'running' && session.pid && (
                     <Badge variant="outline" className="text-xs">
                       <Cpu className="h-3 w-3 mr-1" />
                       PID {session.pid}
