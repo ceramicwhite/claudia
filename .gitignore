@@ -25,3 +25,6 @@ dist-ssr
 temp_lib/
 
 .cursor/
+
+# Test coverage
+coverage/

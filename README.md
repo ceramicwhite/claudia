@@ -376,6 +376,21 @@ cd src-tauri && cargo test
 cd src-tauri && cargo fmt
 ```
 
+### Testing
+
+```bash
+# Run frontend tests
+bun run test              # Run tests in watch mode
+bun run test:ui           # Run tests with UI
+bun run test:coverage     # Generate coverage report
+
+# Run backend tests
+cd src-tauri && cargo test --lib  # Run library tests
+cd src-tauri && cargo test         # Run all tests
+```
+
+For comprehensive testing documentation, see [TESTING.md](TESTING.md).
+
 ## 🔒 Security
 
 Claudia implements multiple layers of security:
