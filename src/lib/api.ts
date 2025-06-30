@@ -994,6 +994,19 @@ export const api = {
   },
 
   /**
+   * Lists all currently running agent sessions with metrics
+   * @returns Promise resolving to list of running agent sessions with metrics
+   */
+  async listRunningAgentSessionsWithMetrics(): Promise<AgentRunWithMetrics[]> {
+    try {
+      return await invoke<AgentRunWithMetrics[]>('list_running_sessions_with_metrics');
+    } catch (error) {
+      console.error("Failed to list running agent sessions with metrics:", error);
+      throw new Error(`Failed to list running agent sessions with metrics: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  },
+
+  /**
    * Kills a running agent session
    * @param runId - The run ID to kill
    * @returns Promise resolving to whether the session was successfully killed

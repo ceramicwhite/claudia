@@ -16,7 +16,7 @@ use commands::agents::{
     get_live_session_output, get_session_output, get_session_status, import_agent,
     import_agent_from_file, import_agent_from_github, init_database, kill_agent_session,
     list_agent_runs, list_agent_runs_with_metrics, list_agents, list_claude_installations,
-    list_running_sessions, set_claude_binary_path, stream_session_output, update_agent, AgentDb,
+    list_running_sessions, list_running_sessions_with_metrics, set_claude_binary_path, stream_session_output, update_agent, AgentDb,
     create_scheduled_agent_run, get_scheduled_agent_runs, cancel_scheduled_agent_run,
 };
 use commands::claude::{
@@ -154,6 +154,7 @@ fn main() {
             list_agent_runs_with_metrics,
             get_agent_run_with_real_time_metrics,
             list_running_sessions,
+            list_running_sessions_with_metrics,
             kill_agent_session,
             get_session_status,
             cleanup_finished_processes,

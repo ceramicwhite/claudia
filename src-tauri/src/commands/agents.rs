@@ -1709,6 +1709,20 @@ pub async fn list_running_sessions(db: State<'_, AgentDb>) -> Result<Vec<AgentRu
     Ok(runs)
 }
 
+/// List all currently running agent sessions with metrics
+#[tauri::command]
+pub async fn list_running_sessions_with_metrics(db: State<'_, AgentDb>) -> Result<Vec<AgentRunWithMetrics>, String> {
+    let runs = list_running_sessions(db).await?;
+    let mut runs_with_metrics = Vec::new();
+
+    for run in runs {
+        let run_with_metrics = get_agent_run_with_metrics(run).await;
+        runs_with_metrics.push(run_with_metrics);
+    }
+
+    Ok(runs_with_metrics)
+}
+
 /// Kill a running agent session
 #[tauri::command]
 pub async fn kill_agent_session(
