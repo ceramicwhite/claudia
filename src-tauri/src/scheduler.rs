@@ -1,5 +1,5 @@
 use crate::commands::agents::{AgentRun, AgentDb};
-use crate::process::ProcessRegistryState;
+use crate::process_registry::ProcessRegistry;
 use chrono::Utc;
 use log::{debug, error, info, warn};
 use rusqlite::params;
@@ -81,7 +81,8 @@ async fn check_and_execute_scheduled_agents(app: &AppHandle) -> Result<(), Strin
     // Find scheduled runs that need to be executed - do all DB work in a block
     let runs_to_execute: Vec<AgentRun> = {
         let db = app.state::<AgentDb>();
-        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let pool = db.0.clone();
+        let conn = pool.get().map_err(|e| e.to_string())?;
         
         let mut stmt = conn.prepare(
             "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, 
@@ -137,14 +138,14 @@ async fn check_and_execute_scheduled_agents(app: &AppHandle) -> Result<(), Strin
     
     // Now execute the runs without holding the DB connection
     let db = app.state::<AgentDb>();
-    let registry = app.state::<ProcessRegistryState>();
+    let registry = app.state::<Arc<std::sync::Mutex<ProcessRegistry>>>();
     
     for run in runs_to_execute {
         let run_id = run.id.unwrap();
         let agent_id = run.agent_id;
         let agent_name = run.agent_name.clone();
         let task = run.task.clone();
-        let model = run.model.clone();
+        let _model = run.model.clone();
         let project_path = run.project_path.clone();
         
         info!("Executing scheduled run {} for agent '{}' with task: {}", run_id, agent_name, task);
@@ -152,19 +153,17 @@ async fn check_and_execute_scheduled_agents(app: &AppHandle) -> Result<(), Strin
         // Execute the agent
         match crate::commands::agents::execute_agent(
             app.clone(),
-            agent_id,
-            project_path,
-            task,
-            Some(model),
-            None, // auto_resume_enabled - scheduled runs don't need this
             db.clone(),
-            registry.clone()
+            registry.clone(),
+            agent_id,
+            Some(task),
+            Some(project_path),
         ).await {
-            Ok(new_run_id) => {
-                info!("Successfully started scheduled agent '{}' with new run ID: {}", agent_name, new_run_id);
+            Ok(new_run) => {
+                info!("Successfully started scheduled agent '{}' with new run ID: {:?}", agent_name, new_run.id);
                 
                 // Mark the original scheduled run as completed
-                if let Ok(conn) = db.0.lock() {
+                if let Ok(conn) = db.0.get() {
                     let _ = conn.execute(
                         "UPDATE agent_runs SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?1",
                         params![run_id]
@@ -175,7 +174,7 @@ async fn check_and_execute_scheduled_agents(app: &AppHandle) -> Result<(), Strin
                 error!("Failed to execute scheduled agent '{}': {}", agent_name, e);
                 
                 // Mark the scheduled run as failed
-                if let Ok(conn) = db.0.lock() {
+                if let Ok(conn) = db.0.get() {
                     let _ = conn.execute(
                         "UPDATE agent_runs SET status = 'failed', completed_at = CURRENT_TIMESTAMP WHERE id = ?1",
                         params![run_id]

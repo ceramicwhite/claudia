@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { TodoStatus, Priority } from "@/constants";
 import { 
   CheckCircle2, 
   Circle, 
@@ -59,15 +60,15 @@ import { open } from "@tauri-apps/plugin-shell";
  */
 export const TodoWidget: React.FC<{ todos: any[]; result?: any }> = ({ todos, result: _result }) => {
   const statusIcons = {
-    completed: <CheckCircle2 className="h-4 w-4 text-green-500" />,
-    in_progress: <Clock className="h-4 w-4 text-blue-500 animate-pulse" />,
-    pending: <Circle className="h-4 w-4 text-muted-foreground" />
+    [TodoStatus.COMPLETED]: <CheckCircle2 className="h-4 w-4 text-green-500" />,
+    [TodoStatus.IN_PROGRESS]: <Clock className="h-4 w-4 text-blue-500 animate-pulse" />,
+    [TodoStatus.PENDING]: <Circle className="h-4 w-4 text-muted-foreground" />
   };
 
   const priorityColors = {
-    high: "bg-red-500/10 text-red-500 border-red-500/20",
-    medium: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-    low: "bg-green-500/10 text-green-500 border-green-500/20"
+    [Priority.HIGH]: "bg-red-500/10 text-red-500 border-red-500/20",
+    [Priority.MEDIUM]: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+    [Priority.LOW]: "bg-green-500/10 text-green-500 border-green-500/20"
   };
 
   return (
@@ -82,7 +83,7 @@ export const TodoWidget: React.FC<{ todos: any[]; result?: any }> = ({ todos, re
             key={todo.id || idx}
             className={cn(
               "flex items-start gap-3 p-3 rounded-lg border bg-card/50",
-              todo.status === "completed" && "opacity-60"
+              todo.status === TodoStatus.COMPLETED && "opacity-60"
             )}
           >
             <div className="mt-0.5">
@@ -91,7 +92,7 @@ export const TodoWidget: React.FC<{ todos: any[]; result?: any }> = ({ todos, re
             <div className="flex-1 space-y-1">
               <p className={cn(
                 "text-sm",
-                todo.status === "completed" && "line-through"
+                todo.status === TodoStatus.COMPLETED && "line-through"
               )}>
                 {todo.content}
               </p>

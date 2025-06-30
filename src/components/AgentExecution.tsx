@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ClaudeModel, TAURI_EVENTS } from "@/constants";
 import { 
   ArrowLeft, 
   Play, 
@@ -88,7 +89,7 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
 }) => {
   const [projectPath, setProjectPath] = useState(initialProjectPath || "");
   const [task, setTask] = useState(initialTask || agent.default_task || "");
-  const [model, setModel] = useState(initialModel || agent.model || "sonnet");
+  const [model, setModel] = useState(initialModel || agent.model || ClaudeModel.SONNET);
   const [scheduledStartTime, setScheduledStartTime] = useState<string | undefined>(undefined);
   const [autoResumeEnabled, setAutoResumeEnabled] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -264,7 +265,7 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
   }, [messages]);
 
 
-  const handleSelectPath = async () => {
+  const handleSelectPath = useCallback(async () => {
     try {
       const selected = await open({
         directory: true,
@@ -277,12 +278,11 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
         setError(null); // Clear any previous errors
       }
     } catch (err) {
-      console.error("Failed to select directory:", err);
       // More detailed error logging
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(`Failed to select directory: ${errorMessage}`);
     }
-  };
+  }, []);
 
   const handleExecute = async () => {
     if (!projectPath || !task.trim()) return;
@@ -303,7 +303,6 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
         onBack();
         return;
       } catch (err) {
-        console.error("Failed to schedule agent:", err);
         setError("Failed to schedule agent execution");
         return;
       }
@@ -333,12 +332,11 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
           const message = JSON.parse(event.payload) as ClaudeStreamMessage;
           setMessages(prev => [...prev, message]);
         } catch (err) {
-          console.error("Failed to parse message:", err, event.payload);
+          // TODO: Consider proper error handling for parse failures
         }
       });
 
       const errorUnlisten = await listen<string>(`agent-error:${runId}`, (event) => {
-        console.error("Agent error:", event.payload);
         setError(event.payload);
       });
 
@@ -389,11 +387,11 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
         }
       }]);
     } catch (err) {
-      console.error("Failed to stop agent:", err);
+      // TODO: Consider proper error handling for stop failures
     }
   };
 
-  const handleBackWithConfirmation = () => {
+  const handleBackWithConfirmation = useCallback(() => {
     if (isRunning) {
       // Show confirmation dialog before navigating away during execution
       const shouldLeave = window.confirm(
@@ -410,18 +408,18 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
     
     // Navigate back
     onBack();
-  };
+  }, [isRunning, onBack]);
 
-  const handleCopyAsJsonl = async () => {
+  const handleCopyAsJsonl = useCallback(async () => {
     const jsonl = rawJsonlOutput.join('\n');
     await navigator.clipboard.writeText(jsonl);
     setCopyPopoverOpen(false);
-  };
+  }, [rawJsonlOutput]);
 
   const handleCopyAsMarkdown = async () => {
     let markdown = `# Agent Execution: ${agent.name}\n\n`;
     markdown += `**Task:** ${task}\n`;
-    markdown += `**Model:** ${model === 'opus' ? 'Claude 4 Opus' : 'Claude 4 Sonnet'}\n`;
+    markdown += `**Model:** ${model === ClaudeModel.OPUS ? 'Claude 4 Opus' : 'Claude 4 Sonnet'}\n`;
     markdown += `**Date:** ${new Date().toISOString()}\n\n`;
     markdown += `---\n\n`;
 
@@ -484,10 +482,10 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
     setCopyPopoverOpen(false);
   };
 
-  const renderIcon = () => {
+  const renderIcon = useCallback(() => {
     const Icon = agent.icon in AGENT_ICONS ? AGENT_ICONS[agent.icon as keyof typeof AGENT_ICONS] : Terminal;
     return <Icon className="h-5 w-5" />;
-  };
+  }, [agent.icon]);
 
   return (
     <div className={cn("flex flex-col h-full bg-background", className)}>
@@ -628,12 +626,12 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => !isRunning && setModel("sonnet")}
+                  onClick={() => !isRunning && setModel(ClaudeModel.SONNET)}
                   className={cn(
                     "flex-1 px-3.5 py-2 rounded-full border-2 font-medium transition-all text-sm",
                     !isRunning && "hover:scale-[1.02] active:scale-[0.98]",
                     isRunning && "opacity-50 cursor-not-allowed",
-                    model === "sonnet" 
+                    model === ClaudeModel.SONNET 
                       ? "border-primary bg-primary text-primary-foreground shadow-lg" 
                       : "border-muted-foreground/30 hover:border-muted-foreground/50"
                   )}
@@ -642,9 +640,9 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
                   <div className="flex items-center justify-center gap-2">
                     <div className={cn(
                       "w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center flex-shrink-0",
-                      model === "sonnet" ? "border-primary-foreground" : "border-current"
+                      model === ClaudeModel.SONNET ? "border-primary-foreground" : "border-current"
                     )}>
-                      {model === "sonnet" && (
+                      {model === ClaudeModel.SONNET && (
                         <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground" />
                       )}
                     </div>
@@ -654,12 +652,12 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
                 
                 <button
                   type="button"
-                  onClick={() => !isRunning && setModel("opus")}
+                  onClick={() => !isRunning && setModel(ClaudeModel.OPUS)}
                   className={cn(
                     "flex-1 px-3.5 py-2 rounded-full border-2 font-medium transition-all text-sm",
                     !isRunning && "hover:scale-[1.02] active:scale-[0.98]",
                     isRunning && "opacity-50 cursor-not-allowed",
-                    model === "opus" 
+                    model === ClaudeModel.OPUS 
                       ? "border-primary bg-primary text-primary-foreground shadow-lg" 
                       : "border-muted-foreground/30 hover:border-muted-foreground/50"
                   )}
@@ -668,9 +666,9 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
                   <div className="flex items-center justify-center gap-2">
                     <div className={cn(
                       "w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center flex-shrink-0",
-                      model === "opus" ? "border-primary-foreground" : "border-current"
+                      model === ClaudeModel.OPUS ? "border-primary-foreground" : "border-current"
                     )}>
-                      {model === "opus" && (
+                      {model === ClaudeModel.OPUS && (
                         <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground" />
                       )}
                     </div>

@@ -1,10 +1,36 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
 
+// Set up window mock before any imports
+if (typeof window === 'undefined') {
+  (global as any).window = {};
+}
+
+// Mock window.__TAURI_INTERNALS__ before importing any Tauri modules
+(global as any).window.__TAURI_INTERNALS__ = {
+  invoke: vi.fn(() => Promise.resolve()),
+};
+
+// Mock matchMedia
+(global as any).window.matchMedia = vi.fn().mockImplementation(query => ({
+  matches: false,
+  media: query,
+  onchange: null,
+  addListener: vi.fn(),
+  removeListener: vi.fn(),
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+  dispatchEvent: vi.fn(),
+}))
+
 // Mock Tauri API
 vi.mock('@tauri-apps/api', () => ({
   invoke: vi.fn(),
   convertFileSrc: vi.fn((path: string) => path),
+}))
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(() => Promise.resolve()),
 }))
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -71,20 +97,41 @@ vi.mock('@tauri-apps/plugin-opener', () => ({
   open: vi.fn(),
 }))
 
-// Mock window.matchMedia for Tailwind CSS dark mode tests
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation(query => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: vi.fn(), // deprecated
-    removeListener: vi.fn(), // deprecated
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
-})
+// Add timer function polyfills for Bun compatibility
+if (!vi.useFakeTimers) {
+  let timersActive = false;
+  const originalSetTimeout = global.setTimeout;
+  const originalSetInterval = global.setInterval;
+  const originalClearTimeout = global.clearTimeout;
+  const originalClearInterval = global.clearInterval;
+  const originalDate = global.Date;
+
+  vi.useFakeTimers = () => {
+    timersActive = true;
+    return {
+      shouldAdvanceTime: true,
+      // Add other timer methods as needed
+    };
+  };
+
+  vi.useRealTimers = () => {
+    timersActive = false;
+    global.setTimeout = originalSetTimeout;
+    global.setInterval = originalSetInterval;
+    global.clearTimeout = originalClearTimeout;
+    global.clearInterval = originalClearInterval;
+    global.Date = originalDate;
+  };
+
+  vi.advanceTimersByTime = (ms: number) => {
+    // Simple implementation - in real scenarios you'd need to track timers
+    return Promise.resolve();
+  };
+
+  vi.runAllTimersAsync = () => {
+    return Promise.resolve();
+  };
+}
 
 // Mock IntersectionObserver for components that use it
 global.IntersectionObserver = vi.fn().mockImplementation(() => ({

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Loader2, Bot, FolderCode } from "lucide-react";
-import { api, type Project, type Session, type ClaudeMdFile } from "@/lib/api";
+import { api, type Session, type ClaudeMdFile } from "@/lib/api";
+import { type Project } from "@/schemas/project";
 import { OutputCacheProvider } from "@/lib/outputCache";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -18,6 +19,7 @@ import { MCPManager } from "@/components/MCPManager";
 import { NFOCredits } from "@/components/NFOCredits";
 import { ClaudeBinaryDialog } from "@/components/ClaudeBinaryDialog";
 import { Toast, ToastContainer } from "@/components/ui/toast";
+import { TAURI_EVENTS } from "@/constants";
 
 type View = "welcome" | "projects" | "agents" | "editor" | "settings" | "claude-file-editor" | "claude-code-session" | "usage-dashboard" | "mcp";
 
@@ -59,10 +61,10 @@ function App() {
       setShowClaudeBinaryDialog(true);
     };
 
-    window.addEventListener('claude-session-selected', handleSessionSelected as EventListener);
+    window.addEventListener(TAURI_EVENTS.CLAUDE_SESSION_SELECTED, handleSessionSelected as EventListener);
     window.addEventListener('claude-not-found', handleClaudeNotFound as EventListener);
     return () => {
-      window.removeEventListener('claude-session-selected', handleSessionSelected as EventListener);
+      window.removeEventListener(TAURI_EVENTS.CLAUDE_SESSION_SELECTED, handleSessionSelected as EventListener);
       window.removeEventListener('claude-not-found', handleClaudeNotFound as EventListener);
     };
   }, []);
@@ -77,7 +79,6 @@ function App() {
       const projectList = await api.listProjects();
       setProjects(projectList);
     } catch (err) {
-      console.error("Failed to load projects:", err);
       setError("Failed to load projects. Please ensure ~/.claude directory exists.");
     } finally {
       setLoading(false);
@@ -95,7 +96,6 @@ function App() {
       setSessions(sessionList);
       setSelectedProject(project);
     } catch (err) {
-      console.error("Failed to load sessions:", err);
       setError("Failed to load sessions for this project.");
     } finally {
       setLoading(false);

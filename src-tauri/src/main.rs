@@ -5,19 +5,20 @@ mod checkpoint;
 mod claude_binary;
 mod commands;
 mod process;
+mod process_registry;
 mod sandbox;
 mod scheduler;
 
 use checkpoint::state::CheckpointState;
 use commands::agents::{
-    cleanup_finished_processes, create_agent, delete_agent, execute_agent, export_agent,
-    export_agent_to_file, fetch_github_agent_content, fetch_github_agents, get_agent,
-    get_agent_run, get_agent_run_with_real_time_metrics, get_claude_binary_path,
-    get_live_session_output, get_session_output, get_session_status, import_agent,
-    import_agent_from_file, import_agent_from_github, init_database, kill_agent_session,
-    list_agent_runs, list_agent_runs_with_metrics, list_agents, list_claude_installations,
-    list_running_sessions, list_running_sessions_with_metrics, set_claude_binary_path, stream_session_output, update_agent, AgentDb,
-    create_scheduled_agent_run, get_scheduled_agent_runs, cancel_scheduled_agent_run, resume_agent,
+    cancel_scheduled_agent_run, cleanup_finished_processes, create_agent, create_scheduled_agent_run,
+    delete_agent, execute_agent, export_agent, export_agent_to_file, fetch_github_agent_content,
+    fetch_github_agents, get_agent, get_agent_run, get_agent_run_with_real_time_metrics,
+    get_claude_binary_path, get_live_session_output, get_scheduled_agent_runs, get_session_output,
+    get_session_status, import_agent, import_agent_from_file, import_agent_from_github, init_db,
+    kill_agent_session, list_agent_runs, list_agent_runs_with_metrics, list_agents,
+    list_claude_installations, list_running_sessions, list_running_sessions_with_metrics,
+    resume_agent, set_claude_binary_path, stream_session_output, update_agent, AgentDb,
 };
 use commands::claude::{
     cancel_claude_execution, check_auto_checkpoint, check_claude_version, cleanup_old_checkpoints,
@@ -46,9 +47,9 @@ use commands::screenshot::{capture_url_screenshot, cleanup_screenshot_temp_files
 use commands::usage::{
     get_session_stats, get_usage_by_date_range, get_usage_details, get_usage_stats,
 };
-use process::ProcessRegistryState;
+use process_registry::ProcessRegistry;
 use scheduler::{start_scheduler, stop_scheduler, SchedulerState};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{Manager, WindowEvent};
 
 fn main() {
@@ -68,8 +69,9 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Initialize agents database
-            let conn = init_database(&app.handle()).expect("Failed to initialize agents database");
-            app.manage(AgentDb(Mutex::new(conn)));
+            let data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
+            let pool = init_db(data_dir).expect("Failed to initialize agents database");
+            app.manage(AgentDb(Arc::new(pool)));
 
             // Initialize checkpoint state
             let checkpoint_state = CheckpointState::new();
@@ -93,7 +95,7 @@ fn main() {
             app.manage(checkpoint_state);
 
             // Initialize process registry
-            app.manage(ProcessRegistryState::default());
+            app.manage(Arc::new(Mutex::new(ProcessRegistry::new())));
 
             // Initialize Claude process state
             app.manage(ClaudeProcessState::default());

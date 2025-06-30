@@ -5,6 +5,7 @@ pub mod checkpoint;
 pub mod claude_binary;
 pub mod commands;
 pub mod process;
+pub mod process_registry;
 pub mod sandbox;
 pub mod scheduler;
 

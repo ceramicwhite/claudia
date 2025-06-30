@@ -51,7 +51,8 @@ pub struct ImportResult {
 /// List all sandbox profiles
 #[tauri::command]
 pub async fn list_sandbox_profiles(db: State<'_, AgentDb>) -> Result<Vec<SandboxProfile>, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     let mut stmt = conn
         .prepare("SELECT id, name, description, is_active, is_default, created_at, updated_at FROM sandbox_profiles ORDER BY name")
@@ -83,7 +84,8 @@ pub async fn create_sandbox_profile(
     name: String,
     description: Option<String>,
 ) -> Result<SandboxProfile, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     conn.execute(
         "INSERT INTO sandbox_profiles (name, description) VALUES (?1, ?2)",
@@ -125,7 +127,8 @@ pub async fn update_sandbox_profile(
     is_active: bool,
     is_default: bool,
 ) -> Result<SandboxProfile, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     // If setting as default, unset other defaults
     if is_default {
@@ -167,7 +170,8 @@ pub async fn update_sandbox_profile(
 /// Delete a sandbox profile
 #[tauri::command]
 pub async fn delete_sandbox_profile(db: State<'_, AgentDb>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     // Check if it's the default profile
     let is_default: bool = conn
@@ -194,7 +198,8 @@ pub async fn get_sandbox_profile(
     db: State<'_, AgentDb>,
     id: i64,
 ) -> Result<SandboxProfile, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     let profile = conn
         .query_row(
@@ -223,7 +228,8 @@ pub async fn list_sandbox_rules(
     db: State<'_, AgentDb>,
     profile_id: i64,
 ) -> Result<Vec<SandboxRule>, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     let mut stmt = conn
         .prepare("SELECT id, profile_id, operation_type, pattern_type, pattern_value, enabled, platform_support, created_at FROM sandbox_rules WHERE profile_id = ?1 ORDER BY operation_type, pattern_value")
@@ -260,7 +266,8 @@ pub async fn create_sandbox_rule(
     enabled: bool,
     platform_support: Option<String>,
 ) -> Result<SandboxRule, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     // Validate rule doesn't conflict
     // TODO: Add more validation logic here
@@ -307,7 +314,8 @@ pub async fn update_sandbox_rule(
     enabled: bool,
     platform_support: Option<String>,
 ) -> Result<SandboxRule, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     conn.execute(
         "UPDATE sandbox_rules SET operation_type = ?1, pattern_type = ?2, pattern_value = ?3, enabled = ?4, platform_support = ?5 WHERE id = ?6",
@@ -341,7 +349,8 @@ pub async fn update_sandbox_rule(
 /// Delete a sandbox rule
 #[tauri::command]
 pub async fn delete_sandbox_rule(db: State<'_, AgentDb>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     conn.execute("DELETE FROM sandbox_rules WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -361,7 +370,8 @@ pub async fn test_sandbox_profile(
     db: State<'_, AgentDb>,
     profile_id: i64,
 ) -> Result<String, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     // Load the profile and rules
     let profile = crate::sandbox::profile::load_profile(&conn, profile_id)
@@ -505,7 +515,8 @@ pub async fn list_sandbox_violations(
     agent_id: Option<i64>,
     limit: Option<i64>,
 ) -> Result<Vec<SandboxViolation>, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     // Build dynamic query
     let mut query = String::from(
@@ -715,7 +726,8 @@ pub async fn log_sandbox_violation(
     process_name: Option<String>,
     pid: Option<i32>,
 ) -> Result<(), String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     conn.execute(
         "INSERT INTO sandbox_violations (profile_id, agent_id, agent_run_id, operation_type, pattern_value, process_name, pid) 
@@ -733,7 +745,8 @@ pub async fn clear_sandbox_violations(
     db: State<'_, AgentDb>,
     older_than_days: Option<i64>,
 ) -> Result<i64, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     let query = if let Some(days) = older_than_days {
         format!(
@@ -754,7 +767,8 @@ pub async fn clear_sandbox_violations(
 pub async fn get_sandbox_violation_stats(
     db: State<'_, AgentDb>,
 ) -> Result<serde_json::Value, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
 
     // Get total violations
     let total: i64 = conn
@@ -808,7 +822,8 @@ pub async fn export_sandbox_profile(
 ) -> Result<SandboxProfileExport, String> {
     // Get the profile
     let profile = {
-        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
         crate::sandbox::profile::load_profile(&conn, profile_id).map_err(|e| e.to_string())?
     };
 
@@ -868,7 +883,8 @@ pub async fn import_sandbox_profiles(
 
         // Check for name conflicts
         let existing: Result<i64, _> = {
-            let conn = db.0.lock().map_err(|e| e.to_string())?;
+            let pool = db.0.clone();
+    let conn = pool.get().map_err(|e| e.to_string())?;
             conn.query_row(
                 "SELECT id FROM sandbox_profiles WHERE name = ?1",
                 params![&profile.name],
