@@ -162,7 +162,7 @@ export const AgentRunsList: React.FC<AgentRunsListProps> = ({
                         
                         {run.status === "paused_usage_limit" && run.usage_limit_reset_time && (
                           <span className="text-orange-600">
-                            Resets: {new Date(run.usage_limit_reset_time).toLocaleString()}
+                            Resume at: {new Date(run.usage_limit_reset_time).toLocaleString()}
                           </span>
                         )}
                       </div>

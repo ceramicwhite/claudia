@@ -2041,10 +2041,14 @@ fn parse_usage_limit_error(output: &str) -> Option<String> {
         // Extract the timestamp
         if let Some(pipe_pos) = output.rfind('|') {
             let timestamp = &output[pipe_pos + 1..];
-            // Convert epoch to ISO 8601
+            // Convert epoch to ISO 8601 and add 1 minute buffer
             if let Ok(epoch) = timestamp.trim().parse::<i64>() {
                 let datetime = chrono::DateTime::<chrono::Utc>::from_timestamp(epoch, 0)
-                    .map(|dt| dt.to_rfc3339());
+                    .map(|dt| {
+                        // Add 1 minute (60 seconds) buffer to avoid hitting the limit immediately
+                        let buffered_time = dt + chrono::Duration::seconds(60);
+                        buffered_time.to_rfc3339()
+                    });
                 return datetime;
             }
         }
