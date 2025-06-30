@@ -220,6 +220,101 @@ pub async fn get_agent_run_with_metrics(run: AgentRun) -> AgentRunWithMetrics {
     }
 }
 
+/// Migrate old runs that ended with usage limit
+fn migrate_old_usage_limit_runs(conn: &Connection) {
+    // Get all completed runs that might have ended with usage limit
+    let mut stmt = match conn.prepare(
+        "SELECT id, session_id, project_path FROM agent_runs 
+         WHERE status IN ('completed', 'failed') 
+         AND usage_limit_reset_time IS NULL"
+    ) {
+        Ok(stmt) => stmt,
+        Err(e) => {
+            debug!("Failed to prepare migration query: {}", e);
+            return;
+        }
+    };
+    
+    let runs = match stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,     // id
+            row.get::<_, String>(1)?,  // session_id
+            row.get::<_, String>(2)?,  // project_path
+        ))
+    }) {
+        Ok(runs) => runs.collect::<Result<Vec<_>, _>>(),
+        Err(e) => {
+            debug!("Failed to query runs for migration: {}", e);
+            return;
+        }
+    };
+    
+    if let Ok(runs) = runs {
+        for (run_id, session_id, project_path) in runs {
+            // Try to read the JSONL file to check for usage limit error
+            let claude_dir = dirs::home_dir()
+                .and_then(|home| Some(home.join(".claude").join("projects")));
+                
+            if let Some(claude_dir) = claude_dir {
+                let encoded_project = project_path.replace('/', "-");
+                let project_dir = claude_dir.join(&encoded_project);
+                let session_file = project_dir.join(format!("{}.jsonl", session_id));
+                
+                if session_file.exists() {
+                    if let Ok(content) = std::fs::read_to_string(&session_file) {
+                        // Check the last few lines for usage limit error
+                        let lines: Vec<&str> = content.lines().collect();
+                        for line in lines.iter().rev().take(10) {
+                            if let Ok(json) = serde_json::from_str::<JsonValue>(line) {
+                                // Check for error in result messages
+                                if json.get("type").and_then(|t| t.as_str()) == Some("result") {
+                                    if let Some(error) = json.get("error").and_then(|e| e.as_str()) {
+                                        if let Some(reset_time) = parse_usage_limit_error(error) {
+                                            // Update the run with the new status and reset time
+                                            let _ = conn.execute(
+                                                "UPDATE agent_runs 
+                                                 SET status = 'paused_usage_limit', 
+                                                     usage_limit_reset_time = ?1 
+                                                 WHERE id = ?2",
+                                                params![reset_time, run_id]
+                                            );
+                                            info!("Migrated run {} to paused_usage_limit status", run_id);
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                // Also check assistant messages for the error
+                                if json.get("type").and_then(|t| t.as_str()) == Some("assistant") {
+                                    if let Some(message) = json.get("message").and_then(|m| m.as_object()) {
+                                        if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
+                                            for item in content {
+                                                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                                                    if let Some(reset_time) = parse_usage_limit_error(text) {
+                                                        let _ = conn.execute(
+                                                            "UPDATE agent_runs 
+                                                             SET status = 'paused_usage_limit', 
+                                                                 usage_limit_reset_time = ?1 
+                                                             WHERE id = ?2",
+                                                            params![reset_time, run_id]
+                                                        );
+                                                        info!("Migrated run {} to paused_usage_limit status", run_id);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Initialize the agents database
 pub fn init_database(app: &AppHandle) -> SqliteResult<Connection> {
     let app_dir = app
@@ -340,6 +435,20 @@ pub fn init_database(app: &AppHandle) -> SqliteResult<Connection> {
         "ALTER TABLE agent_runs ADD COLUMN parent_run_id INTEGER",
         [],
     );
+    
+    // Migrate existing data to have default values for new non-nullable columns
+    let _ = conn.execute(
+        "UPDATE agent_runs SET auto_resume_enabled = 0 WHERE auto_resume_enabled IS NULL",
+        [],
+    );
+    let _ = conn.execute(
+        "UPDATE agent_runs SET resume_count = 0 WHERE resume_count IS NULL",
+        [],
+    );
+    
+    // Migrate old runs that ended with usage limit but don't have the new status
+    // This will help identify old runs that should show the resume button
+    migrate_old_usage_limit_runs(&conn);
 
     // Drop old columns that are no longer needed (data is now read from JSONL files)
     // Note: SQLite doesn't support DROP COLUMN, so we'll ignore errors for existing columns
