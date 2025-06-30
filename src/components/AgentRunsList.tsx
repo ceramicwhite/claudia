@@ -160,11 +160,32 @@ export const AgentRunsList: React.FC<AgentRunsListProps> = ({
                           </div>
                         )}
                         
-                        {run.status === "paused_usage_limit" && run.usage_limit_reset_time && (
-                          <span className="text-orange-600">
-                            Resume at: {new Date(run.usage_limit_reset_time).toLocaleString()}
-                          </span>
-                        )}
+                        {run.status === "paused_usage_limit" && run.usage_limit_reset_time && (() => {
+                          const resetTime = new Date(run.usage_limit_reset_time);
+                          const now = new Date();
+                          const isPastResetTime = now > resetTime;
+                          
+                          if (run.auto_resume_enabled && !isPastResetTime) {
+                            return (
+                              <span className="text-orange-600">
+                                Auto-resumes at: {resetTime.toLocaleString()}
+                              </span>
+                            );
+                          } else if (!run.auto_resume_enabled && !isPastResetTime) {
+                            return (
+                              <span className="text-orange-600">
+                                Can resume after: {resetTime.toLocaleString()}
+                              </span>
+                            );
+                          } else if (isPastResetTime) {
+                            return (
+                              <span className="text-green-600">
+                                Ready to resume
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
                     
@@ -187,35 +208,47 @@ export const AgentRunsList: React.FC<AgentRunsListProps> = ({
                            "Pending"}
                         </Badge>
                         
-                        {run.status === "paused_usage_limit" && run.usage_limit_reset_time && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-6 text-xs px-2"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              try {
-                                // Resume the agent by creating a new scheduled run
-                                await api.createScheduledAgentRun(
-                                  run.agent_id,
-                                  run.project_path,
-                                  run.task,
-                                  run.model,
-                                  new Date().toISOString() // Run immediately
-                                );
-                                alert("Agent has been resumed");
-                                // Refresh the list if there's a callback
-                                window.location.reload();
-                              } catch (error) {
-                                console.error("Failed to resume agent:", error);
-                                alert("Failed to resume agent");
-                              }
-                            }}
-                          >
-                            <RefreshCw className="h-3 w-3 mr-1" />
-                            Resume
-                          </Button>
-                        )}
+                        {run.status === "paused_usage_limit" && run.usage_limit_reset_time && (() => {
+                          const resetTime = new Date(run.usage_limit_reset_time);
+                          const now = new Date();
+                          const isPastResetTime = now > resetTime;
+                          
+                          // Show resume button if:
+                          // 1. Auto-resume is disabled, OR
+                          // 2. The reset time has passed (so it's ready to resume manually)
+                          if (!run.auto_resume_enabled || isPastResetTime) {
+                            return (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-xs px-2"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    // Resume the agent by creating a new scheduled run
+                                    await api.createScheduledAgentRun(
+                                      run.agent_id,
+                                      run.project_path,
+                                      run.task,
+                                      run.model,
+                                      new Date().toISOString() // Run immediately
+                                    );
+                                    alert("Agent has been resumed");
+                                    // Refresh the list if there's a callback
+                                    window.location.reload();
+                                  } catch (error) {
+                                    console.error("Failed to resume agent:", error);
+                                    alert("Failed to resume agent");
+                                  }
+                                }}
+                              >
+                                <RefreshCw className="h-3 w-3 mr-1" />
+                                Resume
+                              </Button>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
                   </div>
