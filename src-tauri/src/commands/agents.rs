@@ -2570,3 +2570,299 @@ pub async fn cancel_scheduled_agent_run(db: State<'_, AgentDb>, run_id: i64) -> 
     log::info!("Cancelled scheduled agent run {}", run_id);
     Ok(())
 }
+
+/// Resume a paused agent session using its session ID
+#[tauri::command]
+pub async fn resume_agent(
+    app: AppHandle,
+    run_id: i64,
+    db: State<'_, AgentDb>,
+    registry: State<'_, crate::process::ProcessRegistryState>,
+) -> Result<i64, String> {
+    info!("Resuming agent run {}", run_id);
+
+    // Get the run details including session_id
+    let (agent_run, _agent) = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        
+        // Get the run details
+        let agent_run: AgentRun = conn
+            .query_row(
+                "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at, usage_limit_reset_time, auto_resume_enabled, resume_count, parent_run_id 
+                 FROM agent_runs WHERE id = ?1",
+                params![run_id],
+                |row| {
+                    Ok(AgentRun {
+                        id: Some(row.get(0)?),
+                        agent_id: row.get(1)?,
+                        agent_name: row.get(2)?,
+                        agent_icon: row.get(3)?,
+                        task: row.get(4)?,
+                        model: row.get(5)?,
+                        project_path: row.get(6)?,
+                        session_id: row.get(7)?,
+                        status: row.get(8)?,
+                        pid: row.get(9)?,
+                        process_started_at: row.get(10)?,
+                        scheduled_start_time: row.get(11)?,
+                        created_at: row.get(12)?,
+                        completed_at: row.get(13)?,
+                        usage_limit_reset_time: row.get(14)?,
+                        auto_resume_enabled: row.get(15)?,
+                        resume_count: row.get(16)?,
+                        parent_run_id: row.get(17)?,
+                    })
+                },
+            )
+            .map_err(|e| format!("Failed to get agent run: {}", e))?;
+        
+        // Check if session_id exists
+        if agent_run.session_id.is_empty() {
+            return Err("Cannot resume: no session ID found for this run".to_string());
+        }
+        
+        // Get the agent details
+        let agent: Agent = conn
+            .query_row(
+                "SELECT id, name, icon, system_prompt, default_task, model, sandbox_enabled, enable_file_read, enable_file_write, enable_network, created_at, updated_at FROM agents WHERE id = ?1",
+                params![agent_run.agent_id],
+                |row| {
+                    Ok(Agent {
+                        id: Some(row.get(0)?),
+                        name: row.get(1)?,
+                        icon: row.get(2)?,
+                        system_prompt: row.get(3)?,
+                        default_task: row.get(4)?,
+                        model: row.get(5)?,
+                        sandbox_enabled: row.get(6)?,
+                        enable_file_read: row.get(7)?,
+                        enable_file_write: row.get(8)?,
+                        enable_network: row.get(9)?,
+                        created_at: row.get(10)?,
+                        updated_at: row.get(11)?,
+                    })
+                },
+            )
+            .map_err(|e| format!("Failed to get agent: {}", e))?;
+        
+        (agent_run, agent)
+    };
+    
+    // Create a new run record for the resumed session
+    let new_run_id = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO agent_runs (agent_id, agent_name, agent_icon, task, model, project_path, session_id, auto_resume_enabled, resume_count, parent_run_id) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                agent_run.agent_id,
+                agent_run.agent_name,
+                agent_run.agent_icon,
+                agent_run.task,
+                agent_run.model,
+                agent_run.project_path,
+                agent_run.session_id, // Use the existing session_id
+                agent_run.auto_resume_enabled,
+                agent_run.resume_count + 1,
+                agent_run.parent_run_id.or(Some(run_id)) // Set parent_run_id to original run
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+        conn.last_insert_rowid()
+    };
+
+    // We'll register the process after spawning it with the PID
+
+    // Build the Claude command with --resume flag
+    // When resuming after a usage limit, we need to provide a continuation prompt
+    // that tells Claude to continue the task it was working on
+    let continuation_prompt = format!(
+        "Continue working on the task: {}. You were interrupted due to usage limits. Please continue from where you left off and complete the remaining work.",
+        agent_run.task
+    );
+    
+    let claude_path = find_claude_binary(&app)?;
+    let mut cmd = create_command_with_env(&claude_path);
+    cmd.arg("--resume")
+        .arg(&agent_run.session_id)
+        .arg("-p")
+        .arg(&continuation_prompt)
+        .arg("--model")
+        .arg(&agent_run.model)
+        .arg("--output-format")
+        .arg("stream-json")
+        .arg("--verbose")
+        .arg("--dangerously-skip-permissions")
+        .current_dir(&agent_run.project_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    // Spawn the process
+    info!("🚀 Spawning Claude process to resume session...");
+    let mut child = cmd.spawn().map_err(|e| {
+        error!("❌ Failed to spawn Claude process: {}", e);
+        format!("Failed to spawn Claude: {}", e)
+    })?;
+
+    // Get the PID and update the database
+    let pid = child.id().unwrap_or(0);
+    let now = chrono::Utc::now().to_rfc3339();
+    info!("✅ Claude process spawned successfully with PID: {}", pid);
+
+    // Update the database with PID and status
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE agent_runs SET status = 'running', pid = ?1, process_started_at = ?2 WHERE id = ?3",
+            params![pid as i64, now, new_run_id],
+        ).map_err(|e| e.to_string())?;
+        
+        // Mark the original run as resumed
+        conn.execute(
+            "UPDATE agent_runs SET status = 'resumed' WHERE id = ?1",
+            params![run_id],
+        ).map_err(|e| e.to_string())?;
+    }
+
+    // Set up stdout/stderr handling
+    let stdout = child.stdout.take().ok_or("Failed to get stdout")?;
+    let stderr = child.stderr.take().ok_or("Failed to get stderr")?;
+
+    let stdout_reader = BufReader::new(stdout);
+    let stderr_reader = BufReader::new(stderr);
+
+    let live_output = std::sync::Arc::new(Mutex::new(String::new()));
+    let start_time = std::time::Instant::now();
+
+    // Spawn tasks to read stdout and stderr
+    let app_handle = app.clone();
+    let live_output_clone = live_output.clone();
+    let registry_clone = registry.0.clone();
+
+    let _stdout_task = tokio::spawn(async move {
+        info!("📖 Starting to read Claude stdout for resumed session...");
+        let mut lines = stdout_reader.lines();
+
+        while let Ok(Some(line)) = lines.next_line().await {
+            // Store live output
+            if let Ok(mut output) = live_output_clone.lock() {
+                output.push_str(&line);
+                output.push('\n');
+            }
+
+            // Store in process registry
+            let _ = registry_clone.append_live_output(new_run_id, &line);
+
+            // Emit the line to the frontend
+            let _ = app_handle.emit(&format!("agent-output:{}", new_run_id), &line);
+            let _ = app_handle.emit("agent-output", &line);
+        }
+
+        info!("✅ Finished reading stdout for resumed session");
+    });
+
+    let app_handle = app.clone();
+    let _stderr_task = tokio::spawn(async move {
+        info!("📖 Starting to read Claude stderr for resumed session...");
+        let mut lines = stderr_reader.lines();
+
+        while let Ok(Some(line)) = lines.next_line().await {
+            error!("stderr: {}", line);
+            let _ = app_handle.emit(&format!("agent-stderr:{}", new_run_id), &line);
+            let _ = app_handle.emit("agent-stderr", &line);
+        }
+
+        info!("✅ Finished reading stderr for resumed session");
+    });
+
+    // Register the process in the registry for live output tracking
+    registry
+        .0
+        .register_process(
+            new_run_id,
+            agent_run.agent_id,
+            agent_run.agent_name.clone(),
+            pid,
+            agent_run.project_path.clone(),
+            agent_run.task.clone(),
+            agent_run.model.clone(),
+            child,
+        )
+        .map_err(|e| format!("Failed to register process: {}", e))?;
+    info!("📋 Registered resumed process in registry");
+
+    // Get the database path for the monitoring task
+    let db_path = {
+        let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+        data_dir.join("agents.db")
+    };
+
+    // Create variables we need for the spawned monitoring task
+    let agent_name_for_monitor = agent_run.agent_name.clone();
+    
+    // Spawn the monitoring task for auto-cleanup
+    let app_clone = app.clone();
+    let live_output_clone = live_output.clone();
+    let registry_for_monitor = registry.0.clone();
+    tokio::spawn(async move {
+        info!("👀 Starting process monitoring for resumed session...");
+        
+        // Monitor the process through the registry
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            
+            // Check if process is still running via registry
+            match registry_for_monitor.is_process_running(new_run_id).await {
+                Ok(is_running) => {
+                    if !is_running {
+                        info!("Process {} has finished", new_run_id);
+                        break;
+                    }
+                }
+                Err(_) => {
+                    // Process might have been removed, assume it's finished
+                    info!("Process {} not found in registry, assuming finished", new_run_id);
+                    break;
+                }
+            }
+        }
+        
+        // Process has finished
+        let duration_ms = start_time.elapsed().as_millis() as i64;
+        info!("⏱️ Resumed process execution took {} ms", duration_ms);
+        // Check for usage limit errors in the output
+        let final_output = if let Ok(output) = live_output_clone.lock() {
+            output.clone()
+        } else {
+            String::new()
+        };
+
+        // We assume success if no usage limit error was found
+        let has_usage_limit_error = parse_usage_limit_error(&final_output).is_some();
+
+        // Update the database based on output
+        if let Ok(conn) = Connection::open(&db_path) {
+            let status = if has_usage_limit_error {
+                "paused_usage_limit"
+            } else {
+                // Without explicit exit status, we assume completed if monitoring ended naturally
+                "completed"
+            };
+
+            let _ = conn.execute(
+                "UPDATE agent_runs SET status = ?1, completed_at = CURRENT_TIMESTAMP WHERE id = ?2",
+                params![status, new_run_id],
+            );
+        }
+
+        // Emit completion event
+        let success = !has_usage_limit_error;
+        let _ = app_clone.emit("agent-complete", success);
+        let _ = app_clone.emit(&format!("agent-complete:{}", new_run_id), success);
+        
+        info!("✅ Monitoring task completed for agent: {}", agent_name_for_monitor);
+    });
+
+    Ok(new_run_id)
+}

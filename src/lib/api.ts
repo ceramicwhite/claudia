@@ -994,6 +994,20 @@ export const api = {
   },
 
   /**
+   * Resume a paused agent session
+   * @param runId - The run ID to resume
+   * @returns Promise resolving to the new run ID
+   */
+  async resumeAgent(runId: number): Promise<number> {
+    try {
+      return await invoke<number>('resume_agent', { runId });
+    } catch (error) {
+      console.error("Failed to resume agent:", error);
+      throw new Error(`Failed to resume agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  },
+
+  /**
    * Lists all currently running agent sessions with metrics
    * @returns Promise resolving to list of running agent sessions with metrics
    */

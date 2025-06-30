@@ -91,14 +91,12 @@ export function RunningSessionsView({ className, showBackButton = false, onBack,
 
   const handleResume = async (session: AgentRunWithMetrics) => {
     try {
-      // Execute the agent with the same parameters
-      await api.executeAgent(
-        session.agent_id,
-        session.project_path,
-        session.task,
-        session.model,
-        session.auto_resume_enabled
-      );
+      // Resume the agent using its session ID
+      if (!session.id) {
+        throw new Error('Session ID not found');
+      }
+      
+      await api.resumeAgent(session.id);
       
       setToast({ message: `${session.agent_name} has been resumed`, type: 'success' });
       await loadRunningSessions();

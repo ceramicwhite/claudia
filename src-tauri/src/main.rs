@@ -17,7 +17,7 @@ use commands::agents::{
     import_agent_from_file, import_agent_from_github, init_database, kill_agent_session,
     list_agent_runs, list_agent_runs_with_metrics, list_agents, list_claude_installations,
     list_running_sessions, list_running_sessions_with_metrics, set_claude_binary_path, stream_session_output, update_agent, AgentDb,
-    create_scheduled_agent_run, get_scheduled_agent_runs, cancel_scheduled_agent_run,
+    create_scheduled_agent_run, get_scheduled_agent_runs, cancel_scheduled_agent_run, resume_agent,
 };
 use commands::claude::{
     cancel_claude_execution, check_auto_checkpoint, check_claude_version, cleanup_old_checkpoints,
@@ -209,7 +209,8 @@ fn main() {
             cleanup_screenshot_temp_files,
             create_scheduled_agent_run,
             get_scheduled_agent_runs,
-            cancel_scheduled_agent_run
+            cancel_scheduled_agent_run,
+            resume_agent
         ])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { .. } = event {
