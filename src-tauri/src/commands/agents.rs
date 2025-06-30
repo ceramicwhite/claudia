@@ -450,14 +450,9 @@ pub fn init_database(app: &AppHandle) -> SqliteResult<Connection> {
     // This will help identify old runs that should show the resume button
     migrate_old_usage_limit_runs(&conn);
 
-    // Drop old columns that are no longer needed (data is now read from JSONL files)
-    // Note: SQLite doesn't support DROP COLUMN, so we'll ignore errors for existing columns
-    let _ = conn.execute(
-        "UPDATE agent_runs SET session_id = '' WHERE session_id IS NULL",
-        [],
-    );
+    // Update status for old runs that don't have a status set
     let _ = conn.execute("UPDATE agent_runs SET status = 'completed' WHERE status IS NULL AND completed_at IS NOT NULL", []);
-    let _ = conn.execute("UPDATE agent_runs SET status = 'failed' WHERE status IS NULL AND completed_at IS NOT NULL AND session_id = ''", []);
+    let _ = conn.execute("UPDATE agent_runs SET status = 'failed' WHERE status IS NULL AND completed_at IS NOT NULL AND session_id IS NULL", []);
     let _ = conn.execute(
         "UPDATE agent_runs SET status = 'pending' WHERE status IS NULL",
         [],
