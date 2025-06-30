@@ -216,15 +216,6 @@ export const SessionCard: React.FC<SessionCardProps> = ({
                 {session.project_path}
               </p>
             </div>
-            
-            {session.session_id && (
-              <div>
-                <p className="text-sm text-muted-foreground">Session ID</p>
-                <p className="text-xs font-mono bg-muted px-2 py-1 rounded truncate">
-                  {session.session_id}
-                </p>
-              </div>
-            )}
 
             {/* Auto-resume indicator */}
             {session.status === 'paused_usage_limit' && session.auto_resume_enabled && (
