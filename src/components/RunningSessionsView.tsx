@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Clock, RefreshCw, ArrowLeft, Pause, ChevronDown, XCircle, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,8 @@ import { SessionOutputViewer } from './SessionOutputViewer';
 import { SessionCard } from './SessionCard';
 import { api } from '@/lib/api';
 import type { AgentRunWithMetrics } from '@/lib/api';
+import { useRunningSessions } from '@/hooks/useAgentRuns';
+import { AgentRunStatus } from '@/constants';
 
 interface RunningSessionsViewProps {
   className?: string;
@@ -17,19 +19,24 @@ interface RunningSessionsViewProps {
 }
 
 export function RunningSessionsView({ className, showBackButton = false, onBack, onEditSession }: RunningSessionsViewProps) {
-  const [allSessions, setAllSessions] = useState<AgentRunWithMetrics[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use custom hook for data fetching with SWR
+  const { sessions: allSessions, isLoading: loading, mutate } = useRunningSessions(5000);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedSession, setSelectedSession] = useState<AgentRunWithMetrics | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   
-  // Separate sessions by status
-  const scheduledSessions = allSessions.filter(s => s.status === 'scheduled');
-  const runningSessions = allSessions.filter(s => s.status === 'running');
-  const pausedSessions = allSessions.filter(s => s.status === 'paused_usage_limit');
-  const failedSessions = allSessions.filter(s => s.status === 'failed');
-  const completedSessions = allSessions.filter(s => s.status === 'completed');
-  const cancelledSessions = allSessions.filter(s => s.status === 'cancelled');
+  // Memoize session filtering
+  const sessionsByStatus = useMemo(() => ({
+    scheduled: allSessions.filter(s => s.status === AgentRunStatus.SCHEDULED),
+    running: allSessions.filter(s => s.status === AgentRunStatus.RUNNING),
+    paused: allSessions.filter(s => s.status === AgentRunStatus.PAUSED_USAGE_LIMIT),
+    failed: allSessions.filter(s => s.status === AgentRunStatus.FAILED),
+    completed: allSessions.filter(s => s.status === AgentRunStatus.COMPLETED),
+    cancelled: allSessions.filter(s => s.status === AgentRunStatus.CANCELLED)
+  }), [allSessions]);
+  
+  const { scheduled: scheduledSessions, running: runningSessions, paused: pausedSessions,
+          failed: failedSessions, completed: completedSessions, cancelled: cancelledSessions } = sessionsByStatus;
   
   // Collapsible states for sections
   const [sectionsExpanded, setSectionsExpanded] = useState({
@@ -41,55 +48,43 @@ export function RunningSessionsView({ className, showBackButton = false, onBack,
     cancelled: false
   });
   
-  const toggleSection = (section: keyof typeof sectionsExpanded) => {
+  const toggleSection = useCallback((section: keyof typeof sectionsExpanded) => {
     setSectionsExpanded(prev => ({ ...prev, [section]: !prev[section] }));
-  };
+  }, []);
 
-  const loadRunningSessions = async () => {
-    try {
-      const sessions = await api.listRunningAgentSessionsWithMetrics();
-      setAllSessions(sessions);
-    } catch (error) {
-      console.error('Failed to load running sessions:', error);
-      setToast({ message: 'Failed to load running sessions', type: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Remove loadRunningSessions since we're using SWR hook
 
-  const refreshSessions = async () => {
+  const refreshSessions = useCallback(async () => {
     setRefreshing(true);
     try {
       // First cleanup finished processes
       await api.cleanupFinishedProcesses();
-      // Then reload the list
-      await loadRunningSessions();
+      // Then reload the list using SWR mutate
+      await mutate();
       setToast({ message: 'Running sessions list has been updated', type: 'success' });
     } catch (error) {
-      console.error('Failed to refresh sessions:', error);
       setToast({ message: 'Failed to refresh sessions', type: 'error' });
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [mutate]);
 
-  const killSession = async (runId: number, agentName: string) => {
+  const killSession = useCallback(async (runId: number, agentName: string) => {
     try {
       const success = await api.killAgentSession(runId);
       if (success) {
         setToast({ message: `${agentName} session has been stopped`, type: 'success' });
         // Refresh the list after killing
-        await loadRunningSessions();
+        await mutate();
       } else {
         setToast({ message: 'Session may have already finished', type: 'error' });
       }
     } catch (error) {
-      console.error('Failed to kill session:', error);
       setToast({ message: 'Failed to terminate session', type: 'error' });
     }
-  };
+  }, [mutate]);
 
-  const handleResume = async (session: AgentRunWithMetrics) => {
+  const handleResume = useCallback(async (session: AgentRunWithMetrics) => {
     try {
       // Resume the agent using its session ID
       if (!session.id) {
@@ -99,14 +94,13 @@ export function RunningSessionsView({ className, showBackButton = false, onBack,
       await api.resumeAgent(session.id);
       
       setToast({ message: `${session.agent_name} has been resumed`, type: 'success' });
-      await loadRunningSessions();
+      await mutate();
     } catch (error) {
-      console.error('Failed to resume session:', error);
       setToast({ message: 'Failed to resume session', type: 'error' });
     }
-  };
+  }, [mutate]);
 
-  const handleRetry = async (session: AgentRunWithMetrics) => {
+  const handleRetry = useCallback(async (session: AgentRunWithMetrics) => {
     try {
       // Execute the agent with the same parameters
       await api.executeAgent(
@@ -118,31 +112,19 @@ export function RunningSessionsView({ className, showBackButton = false, onBack,
       );
       
       setToast({ message: `${session.agent_name} has been retried`, type: 'success' });
-      await loadRunningSessions();
+      await mutate();
     } catch (error) {
-      console.error('Failed to retry session:', error);
       setToast({ message: 'Failed to retry session', type: 'error' });
     }
-  };
+  }, [mutate]);
 
-  const handleEdit = (session: AgentRunWithMetrics) => {
+  const handleEdit = useCallback((session: AgentRunWithMetrics) => {
     if (onEditSession) {
       onEditSession(session);
     }
-  };
+  }, [onEditSession]);
 
-  useEffect(() => {
-    loadRunningSessions();
-    
-    // Set up auto-refresh every 5 seconds
-    const interval = setInterval(() => {
-      if (!refreshing) {
-        loadRunningSessions();
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [refreshing]);
+  // Remove manual polling since SWR handles it
 
   if (loading) {
     return (

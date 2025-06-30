@@ -1,367 +1,518 @@
 # Testing Documentation
 
-This document provides comprehensive information about the test suite structure, coverage metrics, and testing best practices for the Claudia project.
-
 ## Overview
 
-Claudia uses a multi-layered testing approach with separate test suites for the frontend (TypeScript/React) and backend (Rust/Tauri) components.
-
-### Testing Stack
-- **Frontend**: Vitest + React Testing Library + Jest DOM
-- **Backend**: Rust's built-in test framework + cargo test
-- **Coverage**: Vitest Coverage (v8) for frontend, cargo-tarpaulin (optional) for Rust
+Claudia's test suite is built with [Vitest](https://vitest.dev/), a modern testing framework that provides fast unit testing with native TypeScript support. The test suite covers React components, services, API integrations, and utility functions with comprehensive mocking of the Tauri API.
 
 ## Test Suite Structure
 
-### Frontend Tests (`/src`)
 ```
 src/
-├── test/
-│   ├── setup.ts              # Test environment setup and global mocks
-│   ├── example.test.tsx      # Example test patterns
-│   └── tauri-integration.test.tsx  # Tauri API integration tests
-├── components/
-│   ├── SessionCard.test.tsx  # Component unit tests
+├── components/          # Component tests
+│   ├── AgentExecution.test.tsx
 │   ├── RunningSessionsView.test.tsx
+│   ├── SessionCard.test.tsx
+│   ├── ToolWidgets.test.tsx
 │   └── ui/
 │       ├── button.test.tsx
 │       └── date-time-picker.test.tsx
-└── lib/
-    └── api.test.ts           # API wrapper tests
+├── lib/                 # Library tests
+│   ├── api.test.ts
+│   ├── api.comprehensive.test.ts
+│   └── errors.test.ts
+├── services/           # Service layer tests
+│   ├── base.service.test.ts
+│   └── project.service.test.ts
+└── test/               # Test utilities and examples
+    ├── example.test.tsx
+    ├── setup.ts        # Global test setup
+    └── tauri-integration.test.tsx
 ```
 
-### Backend Tests (`/src-tauri/tests`)
-```
-src-tauri/tests/
-├── agents_tests.rs          # Agent execution tests
-├── edge_cases_tests.rs      # Edge case handling
-├── integration_tests.rs     # Integration scenarios
-├── scheduler_tests.rs       # Scheduler functionality
-└── sandbox_tests.rs         # Security sandbox tests
+## Test Coverage Summary
+
+As of the last test run:
+- **Test Files**: 13 (9 passed, 4 failed)
+- **Tests**: 412 total (373 passed, 38 failed, 1 skipped)
+- **Coverage**: Comprehensive coverage configuration targeting all source files except test files, configs, and Rust code
+
+### Coverage Configuration
+
+```typescript
+coverage: {
+  provider: 'v8',
+  reporter: ['text', 'json', 'html'],
+  exclude: [
+    'node_modules/',
+    'src/test/',
+    '**/*.d.ts',
+    '**/*.config.*',
+    '**/mockdata/**',
+    'src-tauri/**',
+  ],
+}
 ```
 
 ## Running Tests
 
-### Frontend Tests
+### Basic Commands
 
 ```bash
-# Run all tests
+# Run all tests once
 bun run test
 
-# Run tests with UI
+# Run tests in watch mode
+bun run test:watch
+
+# Run tests with UI interface
 bun run test:ui
 
-# Run tests once (no watch)
-bun run test:run
-
-# Generate coverage report
+# Run tests with coverage report
 bun run test:coverage
-```
-
-### Backend Tests
-
-```bash
-# Run all Rust tests
-cd src-tauri && cargo test
 
 # Run specific test file
-cd src-tauri && cargo test --test agents_tests
+bun test src/lib/api.test.ts
 
-# Run with verbose output
-cd src-tauri && cargo test -- --nocapture
-
-# Run library tests only
-cd src-tauri && cargo test --lib
+# Run tests matching a pattern
+bun test --grep "api"
 ```
 
-## Test Coverage Metrics
+### Environment Setup
 
-### Frontend Coverage (as of latest run)
+Tests run in a jsdom environment with comprehensive Tauri API mocking. The setup file (`src/test/setup.ts`) provides:
 
-**Overall Coverage**: 6.84%
-
-| Category | Statements | Branches | Functions | Lines |
-|----------|------------|----------|-----------|-------|
-| All files | 6.84% | 68.42% | 26.48% | 6.84% |
-| Components | 4.12% | 72.32% | 42.64% | 4.12% |
-| UI Components | 33.28% | 65.88% | 34.14% | 33.28% |
-| Library | 13.61% | 75% | 14.85% | 13.61% |
-
-**Well-tested components:**
-- `SessionCard.tsx`: 99.11% coverage
-- `RunningSessionsView.tsx`: 96.49% coverage
-- `button.tsx`: 100% coverage
-- `badge.tsx`: 100% coverage
-- `utils.ts`: 100% coverage
-
-**Areas needing improvement:**
-- Main application components (App.tsx, Settings.tsx)
-- Complex UI components (ClaudeSession.tsx, AgentExecution.tsx)
-- API integration layers
-
-### Backend Coverage
-
-Currently, the backend has:
-- 1 library test passing
-- Multiple integration test files with compilation issues due to missing dev dependencies
-- Test infrastructure in place but needs dependency updates
+1. **Tauri API Mocking**: All Tauri APIs are mocked to enable testing without the desktop runtime
+2. **Window API Polyfills**: Browser APIs like `matchMedia`, `IntersectionObserver`, and `ResizeObserver`
+3. **Testing Library Integration**: Jest DOM matchers for improved assertions
+4. **Timer Function Polyfills**: Support for fake timers in Bun environment
 
 ## Key Test Scenarios
 
-### Frontend Testing Patterns
+### 1. Component Testing
 
-1. **Component Testing**
-   ```typescript
-   // Example from SessionCard.test.tsx
-   it('should display session metrics correctly', () => {
-     render(<SessionCard session={mockSession} />);
-     expect(screen.getByText('1,234 tokens')).toBeInTheDocument();
-     expect(screen.getByText('$0.12')).toBeInTheDocument();
-   });
-   ```
+Component tests use React Testing Library for user-centric testing:
 
-2. **Tauri API Mocking**
-   ```typescript
-   // Mocking Tauri invoke calls
-   vi.mocked(invoke).mockResolvedValueOnce({ data: 'test' });
-   const result = await invoke('test_command', { arg: 'value' });
-   ```
+```typescript
+// Example from button.test.tsx
+describe('Button', () => {
+  it('handles click events', async () => {
+    const user = userEvent.setup()
+    const handleClick = vi.fn()
+    render(<Button onClick={handleClick}>Click me</Button>)
+    
+    const button = screen.getByRole('button')
+    await user.click(button)
+    
+    expect(handleClick).toHaveBeenCalledTimes(1)
+  })
+})
+```
 
-3. **Event Testing**
-   ```typescript
-   // Testing user interactions
-   const user = userEvent.setup();
-   await user.click(screen.getByRole('button'));
-   expect(mockCallback).toHaveBeenCalled();
-   ```
+### 2. Service Layer Testing
 
-### Backend Testing Patterns
+Service tests focus on the BaseService pattern and error handling:
 
-1. **Unit Tests**
-   ```rust
-   #[cfg(test)]
-   mod tests {
-       use super::*;
-       
-       #[test]
-       fn test_checkpoint_state_lifecycle() {
-           // Test implementation
-       }
-   }
-   ```
+```typescript
+// Example from base.service.test.ts
+describe('BaseService', () => {
+  it('should retry on retryable errors', async () => {
+    const networkError = new AppError(ErrorCode.NETWORK_ERROR, 'Network failed');
+    
+    mockInvoke
+      .mockRejectedValueOnce(networkError)
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValueOnce('success');
 
-2. **Integration Tests**
-   ```rust
-   #[tokio::test]
-   async fn test_agent_execution() {
-       // Test async operations
-   }
-   ```
+    const result = await service.testInvoke('retry_command', {}, retrySchema);
+    expect(result).toBe('success');
+    expect(mockInvoke).toHaveBeenCalledTimes(3);
+  })
+})
+```
 
-## Testing Best Practices
+### 3. API Integration Testing
 
-### General Guidelines
+API tests ensure proper command invocation and error handling:
 
-1. **Test Naming**: Use descriptive names that explain what is being tested
-   ```typescript
-   // Good
-   it('should show error toast when session fails to load')
-   
-   // Bad
-   it('test error')
-   ```
+```typescript
+// Example from api.test.ts
+describe('api', () => {
+  it('should create a scheduled agent run', async () => {
+    const expectedRunId = 123
+    mockInvoke.mockResolvedValueOnce(expectedRunId)
 
-2. **Test Organization**: Group related tests using `describe` blocks
-3. **Mock External Dependencies**: Always mock Tauri APIs, network calls, and file system operations
-4. **Test User Behavior**: Focus on testing what users see and do, not implementation details
+    const result = await api.createScheduledAgentRun(
+      1, '/test/project', 'Test task', 'claude-3-sonnet', '2024-01-15T10:30:00Z'
+    )
 
-### Frontend Specific
+    expect(mockInvoke).toHaveBeenCalledWith('create_scheduled_agent_run', {
+      agentId: 1,
+      projectPath: '/test/project',
+      task: 'Test task',
+      model: 'claude-3-sonnet',
+      scheduledStartTime: '2024-01-15T10:30:00Z'
+    })
+    expect(result).toBe(expectedRunId)
+  })
+})
+```
 
-1. **Use React Testing Library queries in order of preference**:
-   - `getByRole` > `getByLabelText` > `getByText` > `getByTestId`
+### 4. Error Handling Testing
 
-2. **Wait for async operations**:
-   ```typescript
-   await waitFor(() => {
-     expect(screen.getByText('Loaded')).toBeInTheDocument();
-   });
-   ```
+Comprehensive error testing with custom error classes:
 
-3. **Test accessibility**: Ensure components are keyboard navigable and screen reader friendly
+```typescript
+// Example from errors.test.ts
+describe('AppError', () => {
+  it('should serialize to JSON correctly', () => {
+    const error = new AppError(
+      ErrorCode.VALIDATION,
+      'Validation failed',
+      { field: 'email' }
+    );
 
-### Backend Specific
+    const json = error.toJSON();
+    expect(json).toEqual({
+      code: 'VALIDATION',
+      message: 'Validation failed',
+      details: { field: 'email' },
+      timestamp: expect.any(String),
+      stackTrace: expect.any(String)
+    });
+  });
+});
+```
 
-1. **Use `#[cfg(test)]` for test modules**: Keeps test code out of production builds
-2. **Test both success and error paths**: Ensure proper error handling
-3. **Use fixtures for complex test data**: Maintain consistency across tests
-4. **Test concurrent operations**: Verify thread safety and async behavior
+## Testing Patterns
+
+### 1. Mock Setup Pattern
+
+All tests follow a consistent mock setup pattern:
+
+```typescript
+// Mock before imports
+const mockInvoke = vi.fn()
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: (...args: any[]) => mockInvoke(...args),
+}))
+
+// Import after mocking
+import { api } from './api'
+
+describe('api', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+  // tests...
+})
+```
+
+### 2. Async Testing Pattern
+
+Proper handling of async operations:
+
+```typescript
+it('should handle async operations', async () => {
+  // Setup
+  mockInvoke.mockResolvedValueOnce(expectedValue)
+  
+  // Execute
+  const result = await api.someAsyncMethod()
+  
+  // Assert
+  expect(result).toBe(expectedValue)
+})
+```
+
+### 3. Error Testing Pattern
+
+Consistent error testing approach:
+
+```typescript
+it('should handle errors correctly', async () => {
+  const error = new Error('Test error')
+  mockInvoke.mockRejectedValueOnce(error)
+
+  await expect(api.someMethod()).rejects.toThrow('Test error')
+})
+```
+
+### 4. Component Event Testing
+
+User interaction testing with Testing Library:
+
+```typescript
+it('should handle user interactions', async () => {
+  const user = userEvent.setup()
+  const onSubmit = vi.fn()
+  
+  render(<Form onSubmit={onSubmit} />)
+  
+  await user.type(screen.getByLabelText('Name'), 'Test User')
+  await user.click(screen.getByRole('button', { name: 'Submit' }))
+  
+  expect(onSubmit).toHaveBeenCalledWith({ name: 'Test User' })
+})
+```
+
+## Mock Utilities
+
+### Tauri API Mocks
+
+The setup file provides comprehensive Tauri mocking:
+
+```typescript
+// Window internals
+window.__TAURI_INTERNALS__ = {
+  invoke: vi.fn(() => Promise.resolve()),
+}
+
+// API modules
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(() => Promise.resolve()),
+}))
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(),
+  emit: vi.fn(),
+  once: vi.fn(),
+}))
+```
+
+### Browser API Mocks
+
+Essential browser APIs for component testing:
+
+```typescript
+// IntersectionObserver
+global.IntersectionObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}))
+
+// ResizeObserver
+global.ResizeObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn(),
+}))
+```
+
+## Known Limitations
+
+### Current Test Failures
+
+1. **Type Export Tests**: Some type definition tests are failing due to module resolution issues
+2. **Component Event Tests**: Certain event handling tests have timing issues that need addressing
+3. **Async Assertions**: Some tests have unhandled promise rejections that need proper await handling
+
+### Testing Constraints
+
+1. **Tauri Runtime**: Tests cannot access actual Tauri runtime features
+2. **File System**: File operations are mocked and don't touch the real filesystem
+3. **Database**: SQLite operations are not tested directly in the frontend tests
+4. **WebView Features**: Platform-specific WebView features cannot be tested
 
 ## CI/CD Integration
 
-### GitHub Actions Configuration
+### GitHub Actions Setup
 
-Create `.github/workflows/test.yml`:
+Add this workflow to `.github/workflows/test.yml`:
 
 ```yaml
 name: Test
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
-  test-frontend:
+  test:
     runs-on: ubuntu-latest
+    
     steps:
       - uses: actions/checkout@v4
+      
       - uses: oven-sh/setup-bun@v1
-      - run: bun install
-      - run: bun run test:coverage
-      - uses: codecov/codecov-action@v3
         with:
-          files: ./coverage/coverage-final.json
-
-  test-backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cd src-tauri && cargo test --lib
+          bun-version: latest
+          
+      - name: Install dependencies
+        run: bun install
+        
+      - name: Run tests
+        run: bun run test:coverage
+        
+      - name: Upload coverage
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: coverage/
 ```
 
-## Known Limitations
+### Pre-commit Hooks
 
-### Current Issues
+Add testing to your pre-commit workflow:
 
-1. **Backend test dependencies**: Several test files require additional dev dependencies:
-   - `once_cell`
-   - `parking_lot`
-   - `pretty_assertions`
-   - `test_case`
-   - `serial_test`
+```bash
+#!/bin/sh
+# .git/hooks/pre-commit
 
-2. **Coverage gaps**: Many core components lack test coverage
-3. **Integration test setup**: Full Tauri integration tests require additional setup
-4. **Platform-specific tests**: Sandbox tests may behave differently across OS
+# Run tests
+bun run test:run
 
-### Temporary Workarounds
+# Check the exit code
+if [ $? -ne 0 ]; then
+  echo "Tests failed. Please fix before committing."
+  exit 1
+fi
+```
 
-- Run `cargo test --lib` for backend to avoid integration test failures
-- Focus on unit tests until integration test dependencies are resolved
-- Use manual testing for platform-specific features
+## Adding New Tests
 
-## Future Testing Improvements
-
-### High Priority
-
-1. **Increase test coverage**:
-   - Target 80% coverage for critical paths
-   - Add tests for all API endpoints
-   - Test error boundaries and edge cases
-
-2. **Fix backend test dependencies**:
-   ```toml
-   # Add to Cargo.toml [dev-dependencies]
-   once_cell = "1.19"
-   parking_lot = "0.12"
-   pretty_assertions = "1.4"
-   test_case = "3.3"
-   serial_test = "3.0"
-   ```
-
-3. **Add E2E tests**: Use Playwright or Cypress for full application testing
-
-### Medium Priority
-
-1. **Performance testing**: Add benchmarks for critical operations
-2. **Visual regression testing**: Ensure UI consistency
-3. **Mutation testing**: Verify test quality
-4. **Property-based testing**: Use proptest for Rust components
-
-### Low Priority
-
-1. **Snapshot testing**: For complex UI components
-2. **Fuzz testing**: For security-critical inputs
-3. **Contract testing**: For API boundaries
-
-## Writing New Tests
-
-### Frontend Test Template
+### Component Test Template
 
 ```typescript
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { YourComponent } from './YourComponent'
+import { MyComponent } from './MyComponent'
 
-describe('YourComponent', () => {
+describe('MyComponent', () => {
   it('should render correctly', () => {
-    render(<YourComponent />);
-    expect(screen.getByRole('button')).toBeInTheDocument();
-  });
+    render(<MyComponent />)
+    expect(screen.getByText('Expected Text')).toBeInTheDocument()
+  })
 
   it('should handle user interaction', async () => {
-    const user = userEvent.setup();
-    const onClick = vi.fn();
+    const user = userEvent.setup()
+    const onAction = vi.fn()
     
-    render(<YourComponent onClick={onClick} />);
-    await user.click(screen.getByRole('button'));
+    render(<MyComponent onAction={onAction} />)
     
-    expect(onClick).toHaveBeenCalled();
-  });
-});
+    await user.click(screen.getByRole('button'))
+    
+    expect(onAction).toHaveBeenCalled()
+  })
+})
 ```
 
-### Backend Test Template
+### Service Test Template
 
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
+```typescript
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-    #[test]
-    fn test_your_function() {
-        // Arrange
-        let input = "test";
-        
-        // Act
-        let result = your_function(input);
-        
-        // Assert
-        assert_eq!(result, expected_value);
-    }
+const mockInvoke = vi.fn()
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: (...args: any[]) => mockInvoke(...args),
+}))
 
-    #[tokio::test]
-    async fn test_async_function() {
-        // Test async operations
-        let result = async_function().await;
-        assert!(result.is_ok());
-    }
-}
+import { MyService } from './MyService'
+
+describe('MyService', () => {
+  let service: MyService
+  
+  beforeEach(() => {
+    vi.clearAllMocks()
+    service = new MyService()
+  })
+
+  it('should perform operation', async () => {
+    mockInvoke.mockResolvedValueOnce({ success: true })
+    
+    const result = await service.doOperation()
+    
+    expect(mockInvoke).toHaveBeenCalledWith('my_command', expect.any(Object))
+    expect(result).toEqual({ success: true })
+  })
+})
 ```
 
-## Debugging Tests
+## Common Pitfalls
 
-### Frontend
-- Use `screen.debug()` to see the current DOM
-- Set `DEBUG_PRINT_LIMIT=0` for unlimited debug output
-- Use VS Code's Vitest extension for debugging
+### 1. Mock Order
+Always mock modules before importing them:
+```typescript
+// ❌ Wrong
+import { api } from './api'
+vi.mock('@tauri-apps/api/core')
 
-### Backend
-- Use `cargo test -- --nocapture` to see println! output
-- Add `RUST_LOG=debug` for detailed logging
-- Use `cargo test -- --test-threads=1` for sequential execution
+// ✅ Correct
+vi.mock('@tauri-apps/api/core')
+import { api } from './api'
+```
+
+### 2. Async Assertions
+Always await async expectations:
+```typescript
+// ❌ Wrong
+expect(asyncFunction()).rejects.toThrow()
+
+// ✅ Correct
+await expect(asyncFunction()).rejects.toThrow()
+```
+
+### 3. Cleanup
+Always clean up after tests:
+```typescript
+beforeEach(() => {
+  vi.clearAllMocks()
+})
+
+afterEach(() => {
+  cleanup() // for React components
+})
+```
+
+### 4. Timer Testing
+Use fake timers for time-dependent tests:
+```typescript
+beforeEach(() => {
+  vi.useFakeTimers()
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+it('should handle timeouts', async () => {
+  const promise = functionWithTimeout()
+  
+  await vi.runAllTimersAsync()
+  
+  await expect(promise).resolves.toBe('done')
+})
+```
+
+## Future Improvements
+
+### Planned Enhancements
+
+1. **E2E Testing**: Implement Playwright tests for full application flows
+2. **Visual Regression**: Add visual regression testing for UI components
+3. **Performance Testing**: Implement performance benchmarks for critical paths
+4. **Mutation Testing**: Add mutation testing to verify test quality
+5. **Test Data Factories**: Create factories for consistent test data generation
+
+### Coverage Goals
+
+- Target: 80%+ code coverage for all new code
+- Critical paths: 90%+ coverage for services and API layers
+- UI Components: Focus on behavior over implementation details
+
+### Testing Infrastructure
+
+1. **Parallel Test Execution**: Enable parallel test runs for faster CI
+2. **Test Sharding**: Split tests across multiple runners
+3. **Flaky Test Detection**: Implement retry logic for flaky tests
+4. **Test Result History**: Track test performance over time
 
 ## Resources
 
 - [Vitest Documentation](https://vitest.dev/)
 - [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/)
-- [Rust Testing Guide](https://doc.rust-lang.org/book/ch11-00-testing.html)
+- [Testing Best Practices](https://github.com/goldbergyoni/javascript-testing-best-practices)
 - [Tauri Testing Guide](https://tauri.app/v1/guides/testing/)
-- [Testing Best Practices](https://kentcdodds.com/blog/common-mistakes-with-react-testing-library)
-
----
-
-*Last updated: December 2024*

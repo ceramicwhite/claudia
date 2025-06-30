@@ -8,6 +8,7 @@ import { ClaudeMemoriesDropdown } from "@/components/ClaudeMemoriesDropdown";
 import { cn } from "@/lib/utils";
 import { formatUnixTimestamp, formatISOTimestamp, truncateText, getFirstLine } from "@/lib/date-utils";
 import type { Session, ClaudeMdFile } from "@/lib/api";
+import { TAURI_EVENTS } from "@/constants";
 
 interface SessionListProps {
   /**
@@ -129,7 +130,7 @@ export const SessionList: React.FC<SessionListProps> = ({
                 )}
                 onClick={() => {
                   // Emit a special event for Claude Code session navigation
-                  const event = new CustomEvent('claude-session-selected', { 
+                  const event = new CustomEvent(TAURI_EVENTS.CLAUDE_SESSION_SELECTED, { 
                     detail: { session, projectPath } 
                   });
                   window.dispatchEvent(event);

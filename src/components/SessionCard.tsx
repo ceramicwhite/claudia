@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { AgentRun, AgentRunWithMetrics } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { AgentRunStatus } from '@/constants';
 
 interface SessionCardProps {
   session: AgentRun | AgentRunWithMetrics;
@@ -85,19 +86,19 @@ export const SessionCard: React.FC<SessionCardProps> = ({
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'running':
+      case AgentRunStatus.RUNNING:
         return <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">Running</Badge>;
-      case 'scheduled':
+      case AgentRunStatus.SCHEDULED:
         return <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-200">Scheduled</Badge>;
-      case 'pending':
+      case AgentRunStatus.PENDING:
         return <Badge variant="secondary">Pending</Badge>;
-      case 'paused_usage_limit':
+      case AgentRunStatus.PAUSED_USAGE_LIMIT:
         return <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-200">Usage Limit</Badge>;
-      case 'cancelled':
+      case AgentRunStatus.CANCELLED:
         return <Badge variant="outline" className="bg-gray-100 text-gray-800 border-gray-200">Cancelled</Badge>;
-      case 'failed':
+      case AgentRunStatus.FAILED:
         return <Badge variant="destructive" className="bg-red-100 text-red-800 border-red-200">Failed</Badge>;
-      case 'completed':
+      case AgentRunStatus.COMPLETED:
         return <Badge variant="default" className="bg-gray-100 text-gray-800 border-gray-200">Completed</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
@@ -108,7 +109,7 @@ export const SessionCard: React.FC<SessionCardProps> = ({
   
   // Check if usage limit has been reached for resume button
   const canResume = () => {
-    if (session.status === 'paused_usage_limit' && session.usage_limit_reset_time) {
+    if (session.status === AgentRunStatus.PAUSED_USAGE_LIMIT && session.usage_limit_reset_time) {
       const resetTime = new Date(session.usage_limit_reset_time);
       const now = new Date();
       return now >= resetTime;
@@ -134,7 +135,7 @@ export const SessionCard: React.FC<SessionCardProps> = ({
                 <CardTitle className="text-base">{session.agent_name}</CardTitle>
                 <div className="flex items-center space-x-2 mt-1">
                   {getStatusBadge(session.status)}
-                  {session.status === 'running' && session.pid && (
+                  {session.status === AgentRunStatus.RUNNING && session.pid && (
                     <Badge variant="outline" className="text-xs">
                       <Cpu className="h-3 w-3 mr-1" />
                       PID {session.pid}
