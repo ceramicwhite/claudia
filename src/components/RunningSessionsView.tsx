@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Square, Clock, Cpu, RefreshCw, Eye, ArrowLeft, Bot, Pause } from 'lucide-react';
+import { Play, Square, Clock, Cpu, RefreshCw, Eye, ArrowLeft, Bot, Pause, ChevronDown, XCircle, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,10 +22,25 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
   const [selectedSession, setSelectedSession] = useState<AgentRun | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   
-  // Separate scheduled, running, and paused sessions
+  // Separate sessions by status
   const scheduledSessions = allSessions.filter(s => s.status === 'scheduled');
   const runningSessions = allSessions.filter(s => s.status === 'running');
   const pausedSessions = allSessions.filter(s => s.status === 'paused_usage_limit');
+  const cancelledSessions = allSessions.filter(s => s.status === 'cancelled');
+  const failedSessions = allSessions.filter(s => s.status === 'failed');
+  
+  // Collapsible states for sections
+  const [sectionsExpanded, setSectionsExpanded] = useState({
+    scheduled: true,
+    running: true,
+    paused: true,
+    cancelled: false,
+    failed: false
+  });
+  
+  const toggleSection = (section: keyof typeof sectionsExpanded) => {
+    setSectionsExpanded(prev => ({ ...prev, [section]: !prev[section] }));
+  };
 
   const loadRunningSessions = async () => {
     try {
@@ -108,6 +123,10 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
         return <Badge variant="secondary">Pending</Badge>;
       case 'paused_usage_limit':
         return <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-200">Usage Limit</Badge>;
+      case 'cancelled':
+        return <Badge variant="outline" className="bg-gray-100 text-gray-800 border-gray-200">Cancelled</Badge>;
+      case 'failed':
+        return <Badge variant="destructive" className="bg-red-100 text-red-800 border-red-200">Failed</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -151,9 +170,6 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
               <ArrowLeft className="h-4 w-4" />
             </Button>
           )}
-          <Play className="h-5 w-5 text-green-600" />
-          <h2 className="text-lg font-semibold">Running Agent Sessions</h2>
-          <Badge variant="secondary">{runningSessions.length}</Badge>
         </div>
         <Button
           variant="outline"
@@ -172,19 +188,24 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
           <CardContent className="flex items-center justify-center p-8">
             <div className="text-center space-y-2">
               <Clock className="h-8 w-8 mx-auto text-muted-foreground" />
-              <p className="text-muted-foreground">No agent sessions are currently running or scheduled</p>
+              <p className="text-muted-foreground">No agent sessions found</p>
             </div>
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Scheduled Sessions Section */}
-          {scheduledSessions.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Clock className="h-5 w-5 text-blue-600" />
-                <h3 className="text-base font-medium text-muted-foreground">Scheduled ({scheduledSessions.length})</h3>
-              </div>
+          <div className="space-y-3">
+            <button
+              onClick={() => toggleSection('scheduled')}
+              className="flex items-center space-x-2 w-full hover:opacity-80 transition-opacity"
+            >
+              <Clock className="h-5 w-5 text-blue-600" />
+              <h3 className="text-base font-medium text-muted-foreground">Scheduled ({scheduledSessions.length})</h3>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${sectionsExpanded.scheduled ? '' : '-rotate-90'}`} />
+            </button>
+            {sectionsExpanded.scheduled && scheduledSessions.length > 0 && (
+              <div className="space-y-3">
               {scheduledSessions.map((session) => (
             <motion.div
               key={session.id}
@@ -280,16 +301,22 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
               </Card>
             </motion.div>
           ))}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
           
           {/* Running Sessions Section */}
-          {runningSessions.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Play className="h-5 w-5 text-green-600" />
-                <h3 className="text-base font-medium text-muted-foreground">Running ({runningSessions.length})</h3>
-              </div>
+          <div className="space-y-3">
+            <button
+              onClick={() => toggleSection('running')}
+              className="flex items-center space-x-2 w-full hover:opacity-80 transition-opacity"
+            >
+              <Play className="h-5 w-5 text-green-600" />
+              <h3 className="text-base font-medium text-muted-foreground">Running ({runningSessions.length})</h3>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${sectionsExpanded.running ? '' : '-rotate-90'}`} />
+            </button>
+            {sectionsExpanded.running && runningSessions.length > 0 && (
+              <div className="space-y-3">
               {runningSessions.map((session) => (
                 <motion.div
                   key={session.id}
@@ -385,16 +412,22 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
                   </Card>
                 </motion.div>
               ))}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
           
           {/* Paused Sessions Section */}
-          {pausedSessions.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Pause className="h-5 w-5 text-orange-600" />
-                <h3 className="text-base font-medium text-muted-foreground">Paused ({pausedSessions.length})</h3>
-              </div>
+          <div className="space-y-3">
+            <button
+              onClick={() => toggleSection('paused')}
+              className="flex items-center space-x-2 w-full hover:opacity-80 transition-opacity"
+            >
+              <Pause className="h-5 w-5 text-orange-600" />
+              <h3 className="text-base font-medium text-muted-foreground">Paused ({pausedSessions.length})</h3>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${sectionsExpanded.paused ? '' : '-rotate-90'}`} />
+            </button>
+            {sectionsExpanded.paused && pausedSessions.length > 0 && (
+              <div className="space-y-3">
               {pausedSessions.map((session) => (
                 <motion.div
                   key={session.id}
@@ -471,8 +504,161 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
                   </Card>
                 </motion.div>
               ))}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
+          
+          {/* Cancelled Sessions Section */}
+          <div className="space-y-3">
+            <button
+              onClick={() => toggleSection('cancelled')}
+              className="flex items-center space-x-2 w-full hover:opacity-80 transition-opacity"
+            >
+              <XCircle className="h-5 w-5 text-gray-600" />
+              <h3 className="text-base font-medium text-muted-foreground">Cancelled ({cancelledSessions.length})</h3>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${sectionsExpanded.cancelled ? '' : '-rotate-90'}`} />
+            </button>
+            {sectionsExpanded.cancelled && cancelledSessions.length > 0 && (
+              <div className="space-y-3">
+              {cancelledSessions.map((session) => (
+                <motion.div
+                  key={session.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Card className="hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="flex items-center justify-center w-8 h-8 bg-gray-100 rounded-full">
+                            <Bot className="h-5 w-5 text-gray-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base">{session.agent_name}</CardTitle>
+                            <div className="flex items-center space-x-2 mt-1">
+                              {getStatusBadge(session.status)}
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedSession(session)}
+                          className="flex items-center space-x-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          <span>View Output</span>
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Task</p>
+                          <p className="text-sm font-medium truncate">{session.task}</p>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-muted-foreground">Model</p>
+                            <p className="font-medium">{session.model}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Cancelled At</p>
+                            <p className="font-medium">
+                              {session.completed_at
+                                ? new Date(session.completed_at).toLocaleString()
+                                : 'Unknown'
+                              }
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+              </div>
+            )}
+          </div>
+          
+          {/* Failed Sessions Section */}
+          <div className="space-y-3">
+            <button
+              onClick={() => toggleSection('failed')}
+              className="flex items-center space-x-2 w-full hover:opacity-80 transition-opacity"
+            >
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              <h3 className="text-base font-medium text-muted-foreground">Failed ({failedSessions.length})</h3>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${sectionsExpanded.failed ? '' : '-rotate-90'}`} />
+            </button>
+            {sectionsExpanded.failed && failedSessions.length > 0 && (
+              <div className="space-y-3">
+              {failedSessions.map((session) => (
+                <motion.div
+                  key={session.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Card className="hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="flex items-center justify-center w-8 h-8 bg-red-100 rounded-full">
+                            <Bot className="h-5 w-5 text-red-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base">{session.agent_name}</CardTitle>
+                            <div className="flex items-center space-x-2 mt-1">
+                              {getStatusBadge(session.status)}
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedSession(session)}
+                          className="flex items-center space-x-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          <span>View Output</span>
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Task</p>
+                          <p className="text-sm font-medium truncate">{session.task}</p>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-muted-foreground">Model</p>
+                            <p className="font-medium">{session.model}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Failed At</p>
+                            <p className="font-medium">
+                              {session.completed_at
+                                ? new Date(session.completed_at).toLocaleString()
+                                : 'Unknown'
+                              }
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
