@@ -1726,11 +1726,11 @@ pub async fn list_running_sessions(db: State<'_, AgentDb>) -> Result<Vec<AgentRu
 
     let mut stmt = conn.prepare(
         "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, scheduled_start_time, created_at, completed_at, usage_limit_reset_time, auto_resume_enabled, resume_count, parent_run_id 
-         FROM agent_runs WHERE status IN ('running', 'scheduled', 'paused_usage_limit', 'cancelled', 'failed') ORDER BY 
+         FROM agent_runs WHERE status IN ('running', 'scheduled', 'paused_usage_limit', 'cancelled', 'failed', 'completed') ORDER BY 
          CASE 
            WHEN status = 'scheduled' THEN scheduled_start_time 
            WHEN status = 'paused_usage_limit' THEN usage_limit_reset_time
-           WHEN status IN ('cancelled', 'failed') THEN completed_at
+           WHEN status IN ('cancelled', 'failed', 'completed') THEN completed_at
            ELSE process_started_at 
          END DESC"
     ).map_err(|e| e.to_string())?;
