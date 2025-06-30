@@ -1492,8 +1492,6 @@ pub async fn execute_agent(
 
             // Emit the line to the frontend with run_id for isolation
             let _ = app_handle.emit(&format!("agent-output:{}", run_id), &line);
-            // Also emit to the generic event for backward compatibility
-            let _ = app_handle.emit("agent-output", &line);
         }
 
         info!(
@@ -1630,7 +1628,6 @@ pub async fn execute_agent(
                 );
             }
 
-            let _ = app.emit("agent-complete", false);
             let _ = app.emit(&format!("agent-complete:{}", run_id), false);
             return;
         }
@@ -1712,7 +1709,6 @@ pub async fn execute_agent(
 
         // Cleanup will be handled by the cleanup_finished_processes function
 
-        let _ = app.emit("agent-complete", true);
         let _ = app.emit(&format!("agent-complete:{}", run_id), true);
     });
 
@@ -2582,7 +2578,7 @@ pub async fn resume_agent(
     info!("Resuming agent run {}", run_id);
 
     // Get the run details including session_id
-    let (agent_run, _agent) = {
+    let (agent_run, agent) = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         
         // Get the run details
@@ -2687,6 +2683,8 @@ pub async fn resume_agent(
         .arg(&agent_run.session_id)
         .arg("-p")
         .arg(&continuation_prompt)
+        .arg("--system-prompt")
+        .arg(&agent.system_prompt)  // Include the agent's system prompt to maintain its behavior
         .arg("--model")
         .arg(&agent_run.model)
         .arg("--output-format")
@@ -2754,9 +2752,8 @@ pub async fn resume_agent(
             // Store in process registry
             let _ = registry_clone.append_live_output(new_run_id, &line);
 
-            // Emit the line to the frontend
+            // Emit the line to the frontend with run_id for isolation
             let _ = app_handle.emit(&format!("agent-output:{}", new_run_id), &line);
-            let _ = app_handle.emit("agent-output", &line);
         }
 
         info!("✅ Finished reading stdout for resumed session");
@@ -2770,7 +2767,6 @@ pub async fn resume_agent(
         while let Ok(Some(line)) = lines.next_line().await {
             error!("stderr: {}", line);
             let _ = app_handle.emit(&format!("agent-stderr:{}", new_run_id), &line);
-            let _ = app_handle.emit("agent-stderr", &line);
         }
 
         info!("✅ Finished reading stderr for resumed session");
@@ -2856,9 +2852,8 @@ pub async fn resume_agent(
             );
         }
 
-        // Emit completion event
+        // Emit completion event with run_id for isolation
         let success = !has_usage_limit_error;
-        let _ = app_clone.emit("agent-complete", success);
         let _ = app_clone.emit(&format!("agent-complete:{}", new_run_id), success);
         
         info!("✅ Monitoring task completed for agent: {}", agent_name_for_monitor);
