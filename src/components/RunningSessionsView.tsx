@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Clock, RefreshCw, ArrowLeft, Pause, ChevronDown, XCircle, AlertCircle } from 'lucide-react';
+import { Play, Clock, RefreshCw, ArrowLeft, Pause, ChevronDown, XCircle, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Toast, ToastContainer } from '@/components/ui/toast';
@@ -27,16 +27,18 @@ export function RunningSessionsView({ className, showBackButton = false, onBack,
   const scheduledSessions = allSessions.filter(s => s.status === 'scheduled');
   const runningSessions = allSessions.filter(s => s.status === 'running');
   const pausedSessions = allSessions.filter(s => s.status === 'paused_usage_limit');
-  const cancelledSessions = allSessions.filter(s => s.status === 'cancelled');
   const failedSessions = allSessions.filter(s => s.status === 'failed');
+  const completedSessions = allSessions.filter(s => s.status === 'completed');
+  const cancelledSessions = allSessions.filter(s => s.status === 'cancelled');
   
   // Collapsible states for sections
   const [sectionsExpanded, setSectionsExpanded] = useState({
     scheduled: true,
     running: true,
     paused: true,
-    cancelled: false,
-    failed: false
+    failed: false,
+    completed: false,
+    cancelled: false
   });
   
   const toggleSection = (section: keyof typeof sectionsExpanded) => {
@@ -307,6 +309,35 @@ export function RunningSessionsView({ className, showBackButton = false, onBack,
                     statusConfig={{
                       bgColor: 'bg-red-100',
                       iconColor: 'text-red-600'
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {/* Completed Sessions Section */}
+          <div className="space-y-3">
+            <button
+              onClick={() => toggleSection('completed')}
+              className="flex items-center space-x-2 w-full hover:opacity-80 transition-opacity"
+            >
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              <h3 className="text-base font-medium text-muted-foreground">Completed ({completedSessions.length})</h3>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${sectionsExpanded.completed ? '' : '-rotate-90'}`} />
+            </button>
+            {sectionsExpanded.completed && completedSessions.length > 0 && (
+              <div className="space-y-3">
+                {completedSessions.map((session, index) => (
+                  <SessionCard
+                    key={session.id}
+                    session={session}
+                    index={index}
+                    onViewOutput={setSelectedSession}
+                    showStopButton={false}
+                    statusConfig={{
+                      bgColor: 'bg-green-100',
+                      iconColor: 'text-green-600'
                     }}
                   />
                 ))}
