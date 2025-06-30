@@ -261,7 +261,21 @@ pub async fn read_session_jsonl(session_id: &str, project_path: &str) -> Result<
 }
 
 /// Get agent run with real-time metrics
-pub async fn get_agent_run_with_metrics(run: AgentRun) -> AgentRunWithMetrics {
+pub async fn get_agent_run_with_metrics(app_data_dir: &std::path::Path, run: AgentRun) -> AgentRunWithMetrics {
+    // First try to read from our persisted output file
+    let run_id = run.id.unwrap_or(0);
+    if let Ok(persisted_output) = read_agent_output_file(app_data_dir, run_id) {
+        if !persisted_output.is_empty() {
+            let metrics = AgentRunMetrics::from_jsonl(&persisted_output, &run.model);
+            return AgentRunWithMetrics {
+                run,
+                metrics: Some(metrics),
+                output: Some(persisted_output),
+            };
+        }
+    }
+    
+    // Fall back to Claude's session file
     match read_session_jsonl(&run.session_id, &run.project_path).await {
         Ok(jsonl_content) => {
             let metrics = AgentRunMetrics::from_jsonl(&jsonl_content, &run.model);
@@ -941,24 +955,28 @@ pub async fn get_agent_run(db: State<'_, AgentDb>, id: i64) -> Result<AgentRun, 
 /// Get agent run with real-time metrics from JSONL
 #[tauri::command]
 pub async fn get_agent_run_with_real_time_metrics(
+    app: AppHandle,
     db: State<'_, AgentDb>,
     id: i64,
 ) -> Result<AgentRunWithMetrics, String> {
     let run = get_agent_run(db, id).await?;
-    Ok(get_agent_run_with_metrics(run).await)
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(get_agent_run_with_metrics(&app_data_dir, run).await)
 }
 
 /// List agent runs with real-time metrics from JSONL
 #[tauri::command]
 pub async fn list_agent_runs_with_metrics(
+    app: AppHandle,
     db: State<'_, AgentDb>,
     agent_id: Option<i64>,
 ) -> Result<Vec<AgentRunWithMetrics>, String> {
     let runs = list_agent_runs(db, agent_id).await?;
     let mut runs_with_metrics = Vec::new();
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
 
     for run in runs {
-        let run_with_metrics = get_agent_run_with_metrics(run).await;
+        let run_with_metrics = get_agent_run_with_metrics(&app_data_dir, run).await;
         runs_with_metrics.push(run_with_metrics);
     }
 
@@ -1438,6 +1456,12 @@ pub async fn execute_agent(
     let live_output = std::sync::Arc::new(Mutex::new(String::new()));
     let start_time = std::time::Instant::now();
 
+    // Get app data directory for output persistence
+    let app_data_dir_for_stdout = app
+        .path()
+        .app_data_dir()
+        .expect("Failed to get app data dir");
+
     // Spawn tasks to read stdout and stderr
     let app_handle = app.clone();
     let session_id_clone = session_id.clone();
@@ -1477,6 +1501,11 @@ pub async fn execute_agent(
 
             // Also store in process registry for cross-session access
             let _ = registry_clone.append_live_output(run_id, &line);
+            
+            // Write to persistent file storage
+            if let Err(e) = write_agent_output_line(&app_data_dir_for_stdout, run_id, &line) {
+                error!("Failed to write output line to file: {}", e);
+            }
 
             // Extract session ID from JSONL output
             if let Ok(json) = serde_json::from_str::<JsonValue>(&line) {
@@ -1769,12 +1798,16 @@ pub async fn list_running_sessions(db: State<'_, AgentDb>) -> Result<Vec<AgentRu
 
 /// List all currently running agent sessions with metrics
 #[tauri::command]
-pub async fn list_running_sessions_with_metrics(db: State<'_, AgentDb>) -> Result<Vec<AgentRunWithMetrics>, String> {
+pub async fn list_running_sessions_with_metrics(
+    app: AppHandle,
+    db: State<'_, AgentDb>
+) -> Result<Vec<AgentRunWithMetrics>, String> {
     let runs = list_running_sessions(db).await?;
     let mut runs_with_metrics = Vec::new();
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
 
     for run in runs {
-        let run_with_metrics = get_agent_run_with_metrics(run).await;
+        let run_with_metrics = get_agent_run_with_metrics(&app_data_dir, run).await;
         runs_with_metrics.push(run_with_metrics);
     }
 
@@ -1939,12 +1972,21 @@ pub async fn get_live_session_output(
 /// Get real-time output for a running session by reading its JSONL file with live output fallback
 #[tauri::command]
 pub async fn get_session_output(
+    app: AppHandle,
     db: State<'_, AgentDb>,
     registry: State<'_, crate::process::ProcessRegistryState>,
     run_id: i64,
 ) -> Result<String, String> {
     // Get the session information
     let run = get_agent_run(db, run_id).await?;
+    
+    // First try to read from our persisted output file
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    if let Ok(persisted_output) = read_agent_output_file(&app_data_dir, run_id) {
+        if !persisted_output.is_empty() {
+            return Ok(persisted_output);
+        }
+    }
 
     // If no session ID yet, try to get live output from registry
     if run.session_id.is_empty() {
@@ -1955,7 +1997,7 @@ pub async fn get_session_output(
         return Ok(String::new());
     }
 
-    // Read the JSONL content
+    // Read the JSONL content from Claude's session file
     match read_session_jsonl(&run.session_id, &run.project_path).await {
         Ok(content) => Ok(content),
         Err(_) => {
@@ -2105,6 +2147,41 @@ pub async fn export_agent_to_file(
     std::fs::write(&file_path, json_data).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(())
+}
+
+/// Helper function to write JSONL output to a file for an agent run
+fn write_agent_output_line(app_data_dir: &std::path::Path, run_id: i64, line: &str) -> Result<(), String> {
+    use std::fs::{create_dir_all, OpenOptions};
+    use std::io::Write;
+    
+    // Create the agent outputs directory if it doesn't exist
+    let outputs_dir = app_data_dir.join("agent_outputs");
+    create_dir_all(&outputs_dir).map_err(|e| format!("Failed to create outputs directory: {}", e))?;
+    
+    // Open or create the output file for this run
+    let output_file = outputs_dir.join(format!("{}.jsonl", run_id));
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&output_file)
+        .map_err(|e| format!("Failed to open output file: {}", e))?;
+    
+    // Write the line
+    writeln!(file, "{}", line).map_err(|e| format!("Failed to write to output file: {}", e))?;
+    
+    Ok(())
+}
+
+/// Helper function to read agent output from file
+pub fn read_agent_output_file(app_data_dir: &std::path::Path, run_id: i64) -> Result<String, String> {
+    use std::fs;
+    
+    let output_file = app_data_dir.join("agent_outputs").join(format!("{}.jsonl", run_id));
+    if output_file.exists() {
+        fs::read_to_string(&output_file).map_err(|e| format!("Failed to read output file: {}", e))
+    } else {
+        Ok(String::new())
+    }
 }
 
 /// Helper function to detect and parse usage limit errors
@@ -2732,6 +2809,12 @@ pub async fn resume_agent(
 
     let live_output = std::sync::Arc::new(Mutex::new(String::new()));
     let start_time = std::time::Instant::now();
+    
+    // Get app data directory for output persistence
+    let app_data_dir_for_stdout = app
+        .path()
+        .app_data_dir()
+        .expect("Failed to get app data dir");
 
     // Spawn tasks to read stdout and stderr
     let app_handle = app.clone();
@@ -2751,6 +2834,11 @@ pub async fn resume_agent(
 
             // Store in process registry
             let _ = registry_clone.append_live_output(new_run_id, &line);
+            
+            // Write to persistent file storage
+            if let Err(e) = write_agent_output_line(&app_data_dir_for_stdout, new_run_id, &line) {
+                error!("Failed to write output line to file: {}", e);
+            }
 
             // Emit the line to the frontend with run_id for isolation
             let _ = app_handle.emit(&format!("agent-output:{}", new_run_id), &line);
