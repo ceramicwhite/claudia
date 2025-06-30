@@ -151,9 +151,9 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
               <ArrowLeft className="h-4 w-4" />
             </Button>
           )}
-          <Play className="h-5 w-5" />
+          <Play className="h-5 w-5 text-green-600" />
           <h2 className="text-lg font-semibold">Running Agent Sessions</h2>
-          <Badge variant="secondary">{allSessions.length}</Badge>
+          <Badge variant="secondary">{runningSessions.length}</Badge>
         </div>
         <Button
           variant="outline"
@@ -182,8 +182,8 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
           {scheduledSessions.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center space-x-2">
-                <Clock className="h-4 w-4 text-blue-600" />
-                <h3 className="text-sm font-medium text-muted-foreground">Scheduled ({scheduledSessions.length})</h3>
+                <Clock className="h-5 w-5 text-blue-600" />
+                <h3 className="text-base font-medium text-muted-foreground">Scheduled ({scheduledSessions.length})</h3>
               </div>
               {scheduledSessions.map((session) => (
             <motion.div
@@ -287,8 +287,8 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
           {runningSessions.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center space-x-2">
-                <Play className="h-4 w-4 text-green-600" />
-                <h3 className="text-sm font-medium text-muted-foreground">Running ({runningSessions.length})</h3>
+                <Play className="h-5 w-5 text-green-600" />
+                <h3 className="text-base font-medium text-muted-foreground">Running ({runningSessions.length})</h3>
               </div>
               {runningSessions.map((session) => (
                 <motion.div
@@ -392,8 +392,8 @@ export function RunningSessionsView({ className, showBackButton = false, onBack 
           {pausedSessions.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center space-x-2">
-                <Pause className="h-4 w-4 text-orange-600" />
-                <h3 className="text-sm font-medium text-muted-foreground">Paused - Usage Limit ({pausedSessions.length})</h3>
+                <Pause className="h-5 w-5 text-orange-600" />
+                <h3 className="text-base font-medium text-muted-foreground">Paused ({pausedSessions.length})</h3>
               </div>
               {pausedSessions.map((session) => (
                 <motion.div
