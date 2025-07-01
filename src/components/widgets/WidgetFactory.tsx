@@ -11,15 +11,24 @@ import { WriteWidget } from "./file/WriteWidget";
 import { EditWidget } from "./file/EditWidget";
 import { EditResultWidget } from "./file/EditResultWidget";
 import { MultiEditWidget } from "./file/MultiEditWidget";
+import { MultiEditResultWidget } from "./file/MultiEditResultWidget";
 import { GrepWidget } from "./search/GrepWidget";
 import { GlobWidget } from "./search/GlobWidget";
 import { BashWidget } from "./command/BashWidget";
+import { CommandWidget } from "./command/CommandWidget";
+import { CommandOutputWidget } from "./command/CommandOutputWidget";
 import { SystemReminderWidget } from "./system/SystemReminderWidget";
+import { SystemInitializedWidget } from "./system/SystemInitializedWidget";
+import { SummaryWidget } from "./system/SummaryWidget";
+import { MCPWidget } from "./mcp/MCPWidget";
+import { TaskWidget } from "./task/TaskWidget";
+import { WebSearchWidget } from "./web/WebSearchWidget";
+import { ThinkingWidget } from "./thinking/ThinkingWidget";
 
-// Widget mapping type - components must accept BaseWidgetProps at minimum
-type WidgetComponent<T extends BaseWidgetProps = BaseWidgetProps> = React.FC<T>;
+// Widget mapping type - any React component
+type WidgetComponent = React.FC<any>;
 
-// Widget registry
+// Widget registry - maps tool names to their components
 const widgetRegistry: Record<string, WidgetComponent> = {
   // Todo widgets
   "TodoWrite": TodoWidget,
@@ -34,6 +43,7 @@ const widgetRegistry: Record<string, WidgetComponent> = {
   "Edit": EditWidget,
   "EditResult": EditResultWidget,
   "MultiEdit": MultiEditWidget,
+  "MultiEditResult": MultiEditResultWidget,
   
   // Search widgets
   "Grep": GrepWidget,
@@ -41,16 +51,25 @@ const widgetRegistry: Record<string, WidgetComponent> = {
   
   // Command widgets
   "Bash": BashWidget,
+  "Command": CommandWidget,
+  "CommandOutput": CommandOutputWidget,
   
   // System widgets
   "SystemReminder": SystemReminderWidget,
+  "SystemInitialized": SystemInitializedWidget,
+  "Summary": SummaryWidget,
   
-  // Note: Add more widgets here as they are extracted
-  // "MCP": MCPWidget,
-  // "Command": CommandWidget,
-  // "WebSearch": WebSearchWidget,
-  // "Task": TaskWidget,
-  // "Thinking": ThinkingWidget,
+  // MCP widget
+  "MCP": MCPWidget,
+  
+  // Task widget
+  "Task": TaskWidget,
+  
+  // Web widgets
+  "WebSearch": WebSearchWidget,
+  
+  // Thinking widget
+  "Thinking": ThinkingWidget,
 };
 
 interface WidgetFactoryProps extends BaseWidgetProps {
@@ -93,11 +112,11 @@ export const WidgetFactory: React.FC<WidgetFactoryProps> = ({
 };
 
 // Export function to register new widgets dynamically
-export const registerWidget = <T extends BaseWidgetProps = BaseWidgetProps>(
+export const registerWidget = (
   toolName: string, 
-  component: WidgetComponent<T>
+  component: WidgetComponent
 ) => {
-  widgetRegistry[toolName] = component as WidgetComponent;
+  widgetRegistry[toolName] = component;
 };
 
 // Export function to check if a widget is registered

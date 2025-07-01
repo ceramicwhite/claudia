@@ -36,7 +36,7 @@ import {
   LSResultWidget,
   ThinkingWidget,
   WebSearchWidget
-} from "./ToolWidgets";
+} from "./widgets";
 
 interface StreamMessageProps {
   message: ClaudeStreamMessage;

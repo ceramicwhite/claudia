@@ -49,9 +49,8 @@ Planned refactoring efforts include:
 When undertaking a refactoring:
 
 1. **Plan**: Create a detailed plan with phases and goals
-2. **Discuss**: Open an issue for community input
-3. **Document**: Keep a record of changes and decisions
-4. **Test**: Ensure comprehensive test coverage
-5. **Migrate**: Provide clear migration guides
+2. **Document**: Keep a record of changes and decisions
+3. **Test**: Ensure comprehensive test coverage
+4. **Migrate**: Provide clear migration guides
 
 For more information on development practices, see the [Development Guide](../DEVELOPMENT.md).
