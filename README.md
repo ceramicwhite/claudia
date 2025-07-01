@@ -152,244 +152,26 @@ Menu → MCP Manager → Add Server → Configure
 
 ## 🚀 Installation
 
-### Prerequisites
+For detailed installation instructions, see the [Installation Guide](docs/INSTALLATION.md).
 
-- **Claude Code CLI**: Install from [Claude's official site](https://claude.ai/code)
+### Quick Start
 
-### Release Executables Will Be Published Soon
-
-## 🔨 Build from Source
-
-### Prerequisites
-
-Before building Claudia from source, ensure you have the following installed:
-
-#### System Requirements
-
-- **Operating System**: Windows 10/11, macOS 11+, or Linux (Ubuntu 20.04+)
-- **RAM**: Minimum 4GB (8GB recommended)
-- **Storage**: At least 1GB free space
-
-#### Required Tools
-
-1. **Rust** (1.70.0 or later)
-   ```bash
-   # Install via rustup
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   ```
-
-2. **Bun** (latest version)
-   ```bash
-   # Install bun
-   curl -fsSL https://bun.sh/install | bash
-   ```
-
-3. **Git**
-   ```bash
-   # Usually pre-installed, but if not:
-   # Ubuntu/Debian: sudo apt install git
-   # macOS: brew install git
-   # Windows: Download from https://git-scm.com
-   ```
-
-4. **Claude Code CLI**
-   - Download and install from [Claude's official site](https://claude.ai/code)
-   - Ensure `claude` is available in your PATH
-
-#### Platform-Specific Dependencies
-
-**Linux (Ubuntu/Debian)**
-```bash
-# Install system dependencies
-sudo apt update
-sudo apt install -y \
-  libwebkit2gtk-4.1-dev \
-  libgtk-3-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev \
-  patchelf \
-  build-essential \
-  curl \
-  wget \
-  file \
-  libssl-dev \
-  libxdo-dev \
-  libsoup-3.0-dev \
-  libjavascriptcoregtk-4.1-dev
-```
-
-**macOS**
-```bash
-# Install Xcode Command Line Tools
-xcode-select --install
-
-# Install additional dependencies via Homebrew (optional)
-brew install pkg-config
-```
-
-**Windows**
-- Install [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-- Install [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) (usually pre-installed on Windows 11)
-
-### Build Steps
-
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/getAsterisk/claudia.git
-   cd claudia
-   ```
-
-2. **Install Frontend Dependencies**
-   ```bash
-   bun install
-   ```
-
-3. **Build the Application**
-   
-   **For Development (with hot reload)**
-   ```bash
-   bun run tauri dev
-   ```
-   
-   **For Production Build**
-   ```bash
-   # Build the application
-   bun run tauri build
-   
-   # The built executable will be in:
-   # - Linux: src-tauri/target/release/bundle/
-   # - macOS: src-tauri/target/release/bundle/
-   # - Windows: src-tauri/target/release/bundle/
-   ```
-
-4. **Platform-Specific Build Options**
-   
-   **Debug Build (faster compilation, larger binary)**
-   ```bash
-   bun run tauri build --debug
-   ```
-   
-   **Build without bundling (creates just the executable)**
-   ```bash
-   bun run tauri build --no-bundle
-   ```
-   
-   **Universal Binary for macOS (Intel + Apple Silicon)**
-   ```bash
-   bun run tauri build --target universal-apple-darwin
-   ```
-
-### Troubleshooting
-
-#### Common Issues
-
-1. **"cargo not found" error**
-   - Ensure Rust is installed and `~/.cargo/bin` is in your PATH
-   - Run `source ~/.cargo/env` or restart your terminal
-
-2. **Linux: "webkit2gtk not found" error**
-   - Install the webkit2gtk development packages listed above
-   - On newer Ubuntu versions, you might need `libwebkit2gtk-4.0-dev`
-
-3. **Windows: "MSVC not found" error**
-   - Install Visual Studio Build Tools with C++ support
-   - Restart your terminal after installation
-
-4. **"claude command not found" error**
-   - Ensure Claude Code CLI is installed and in your PATH
-   - Test with `claude --version`
-
-5. **Build fails with "out of memory"**
-   - Try building with fewer parallel jobs: `cargo build -j 2`
-   - Close other applications to free up RAM
-
-#### Verify Your Build
-
-After building, you can verify the application works:
-
-```bash
-# Run the built executable directly
-# Linux/macOS
-./src-tauri/target/release/claudia
-
-# Windows
-./src-tauri/target/release/claudia.exe
-```
-
-### Build Artifacts
-
-The build process creates several artifacts:
-
-- **Executable**: The main Claudia application
-- **Installers** (when using `tauri build`):
-  - `.deb` package (Linux)
-  - `.AppImage` (Linux)
-  - `.dmg` installer (macOS)
-  - `.msi` installer (Windows)
-  - `.exe` installer (Windows)
-
-All artifacts are located in `src-tauri/target/release/bundle/`.
+- **Prerequisites**: Claude Code CLI from [Claude's official site](https://claude.ai/code)
+- **Pre-built binaries**: Coming soon! Check [releases](https://github.com/getAsterisk/claudia/releases)
+- **Build from source**: See the [Installation Guide](docs/INSTALLATION.md#build-from-source)
 
 ## 🛠️ Development
 
-### Tech Stack
+For comprehensive development documentation, see the [Development Guide](docs/DEVELOPMENT.md).
 
-- **Frontend**: React 18 + TypeScript + Vite 6
-- **Backend**: Rust with Tauri 2
-- **UI Framework**: Tailwind CSS v4 + shadcn/ui
-- **Database**: SQLite (via rusqlite)
-- **Package Manager**: Bun
+### Quick Reference
 
-### Project Structure
+- **Tech Stack**: React 18 + TypeScript + Vite 6 + Rust + Tauri 2
+- **Start developing**: `bun run tauri dev`
+- **Run tests**: `bun run test` (frontend), `cargo test` (backend)
+- **Architecture**: See [Architecture Overview](docs/ARCHITECTURE.md)
 
-```
-claudia/
-├── src/                   # React frontend
-│   ├── components/        # UI components
-│   ├── lib/               # API client & utilities
-│   └── assets/            # Static assets
-├── src-tauri/             # Rust backend
-│   ├── src/
-│   │   ├── commands/      # Tauri command handlers
-│   │   ├── sandbox/       # Security sandboxing
-│   │   └── checkpoint/    # Timeline management
-│   └── tests/             # Rust test suite
-└── public/                # Public assets
-```
-
-### Development Commands
-
-```bash
-# Start development server
-bun run tauri dev
-
-# Run frontend only
-bun run dev
-
-# Type checking
-bunx tsc --noEmit
-
-# Run Rust tests
-cd src-tauri && cargo test
-
-# Format code
-cd src-tauri && cargo fmt
-```
-
-### Testing
-
-```bash
-# Run frontend tests
-bun run test              # Run tests in watch mode
-bun run test:ui           # Run tests with UI
-bun run test:coverage     # Generate coverage report
-
-# Run backend tests
-cd src-tauri && cargo test --lib  # Run library tests
-cd src-tauri && cargo test         # Run all tests
-```
-
-For comprehensive testing documentation, see [TESTING.md](TESTING.md).
+For more details on commands, project structure, and contributing guidelines, see the [Development Guide](docs/DEVELOPMENT.md).
 
 ## 🔒 Security
 
