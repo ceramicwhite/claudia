@@ -13,7 +13,7 @@ use checkpoint::state::CheckpointState;
 use commands::agents::{
     cancel_scheduled_agent_run, cleanup_finished_processes, create_agent, create_scheduled_agent_run,
     delete_agent, execute_agent, export_agent, export_agent_to_file, fetch_github_agent_content,
-    fetch_github_agents, get_agent, get_agent_run, get_agent_run_with_real_time_metrics,
+    fetch_github_agents, get_agent, get_agent_run, get_agent_run_output, get_agent_run_with_real_time_metrics,
     get_claude_binary_path, get_live_session_output, get_scheduled_agent_runs, get_session_output,
     get_session_status, import_agent, import_agent_from_file, import_agent_from_github, init_db,
     kill_agent_session, list_agent_runs, list_agent_runs_with_metrics, list_agents,
@@ -161,6 +161,7 @@ fn main() {
             get_session_status,
             cleanup_finished_processes,
             get_session_output,
+            get_agent_run_output,
             get_live_session_output,
             stream_session_output,
             get_claude_binary_path,

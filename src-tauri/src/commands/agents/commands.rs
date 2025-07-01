@@ -1,4 +1,4 @@
-use crate::commands::agents::{error::AgentError, service::*, types::*, AgentDb, AgentRunWithMetrics};
+use crate::commands::agents::{error::AgentError, repository::{AgentRepository, SqliteAgentRepository}, service::*, types::*, AgentDb, AgentRunWithMetrics};
 use crate::process_registry::ProcessRegistry;
 use crate::claude_binary::ClaudeInstallation;
 use std::sync::{Arc, Mutex};
@@ -265,6 +265,18 @@ pub async fn get_session_output(
     
     service.get_session_output(pool, session_id)
         .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_agent_run_output(
+    db: State<'_, AgentDb>,
+    run_id: i64,
+) -> Result<String, String> {
+    let pool = db.0.clone();
+    
+    let repository = SqliteAgentRepository::new((*pool).clone());
+    repository.get_jsonl_output(run_id)
         .map_err(|e| e.to_string())
 }
 

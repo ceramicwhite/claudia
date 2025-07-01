@@ -132,7 +132,22 @@ export function AgentRunOutputViewer({
       }
 
       setLoading(true);
-      const rawOutput = await api.getSessionOutput(run.session_id);
+      
+      // Check if session_id is valid
+      let rawOutput: string;
+      if (!run.session_id || run.session_id.trim() === '') {
+        console.warn('AgentRunOutputViewer: Empty session_id for run, using fallback', run);
+        // Use fallback to get output from database by run_id
+        if (run.id) {
+          rawOutput = await api.getAgentRunOutput(run.id);
+        } else {
+          setToast({ message: 'No session ID or run ID available', type: 'error' });
+          setLoading(false);
+          return;
+        }
+      } else {
+        rawOutput = await api.getSessionOutput(run.session_id);
+      }
       
       // Parse JSONL output into messages
       const jsonlLines = rawOutput.split('\n').filter(line => line.trim());

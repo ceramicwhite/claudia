@@ -90,6 +90,7 @@ export const api = {
   getSessionStatus: agentService.getSessionStatus.bind(agentService),
   cleanupFinishedProcesses: agentService.cleanupFinishedProcesses.bind(agentService),
   getSessionOutput: agentService.getSessionOutput.bind(agentService),
+  getAgentRunOutput: agentService.getAgentRunOutput.bind(agentService),
   getLiveSessionOutput: agentService.getLiveSessionOutput.bind(agentService),
   streamSessionOutput: agentService.streamSessionOutput.bind(agentService),
 

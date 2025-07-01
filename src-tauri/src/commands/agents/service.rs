@@ -369,16 +369,30 @@ impl AgentService {
     ) -> Result<String, AgentError> {
         let repo = SqliteAgentRepository::new(pool.as_ref().clone());
 
+        // First try to get output from database
         if let Some(run) = repo.find_run_by_session_id(&session_id)? {
             if let Some(run_id) = run.id {
-                return repo.get_jsonl_output(run_id);
+                let db_output = repo.get_jsonl_output(run_id)?;
+                if !db_output.is_empty() {
+                    return Ok(db_output);
+                }
             }
         }
 
-        Err(AgentError::Other(format!(
-            "No session found with ID: {}",
-            session_id
-        )))
+        // If no output in database, try to read from session file
+        let home = std::env::var("HOME").map_err(|e| AgentError::Other(format!("Failed to get HOME: {}", e)))?;
+        let session_file = std::path::Path::new(&home)
+            .join(".claude")
+            .join(&session_id)
+            .join("session-output.jsonl");
+        
+        if session_file.exists() {
+            std::fs::read_to_string(&session_file)
+                .map_err(|e| AgentError::Other(format!("Failed to read session file: {}", e)))
+        } else {
+            // Return empty string if no output found anywhere
+            Ok(String::new())
+        }
     }
 
     /// Export agent to JSON

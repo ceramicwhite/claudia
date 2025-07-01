@@ -36,7 +36,7 @@ export abstract class BaseService {
     schemaOrErrorMessage?: z.ZodSchema<TOutput> | string
   ): Promise<TOutput> {
     try {
-      this.log(`Invoking command: ${command}`, args);
+      this.log(`Invoking command: ${command}`, JSON.stringify(args));
       
       const result = await this.invokeWithRetry(command, args);
       
@@ -62,7 +62,7 @@ export abstract class BaseService {
     args: TInput
   ): Promise<void> {
     try {
-      this.log(`Invoking command: ${command}`, args);
+      this.log(`Invoking command: ${command}`, JSON.stringify(args));
       
       await this.invokeWithRetry(command, args);
       
@@ -142,6 +142,9 @@ export abstract class BaseService {
    * Handle errors consistently
    */
   private handleError(error: unknown, command: string): never {
+    // Log the raw error for debugging
+    console.error(`[${this.serviceName}] Raw error for command ${command}:`, error);
+    
     const appError = error instanceof AppError
       ? error
       : error instanceof Error
