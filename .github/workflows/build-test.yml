@@ -96,9 +96,22 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
+      # Run frontend tests
+      - name: Run frontend tests
+        run: bun test
+
       # Build frontend
       - name: Build frontend
         run: bun run build
+
+      # Run Rust tests
+      - name: Run Rust tests
+        run: |
+          cd src-tauri
+          cargo test --release
+        env:
+          # Ensure tests use temporary directories
+          CARGO_TARGET_DIR: target
 
       # Build Tauri application (no bundle for faster CI)
       - name: Build Tauri application

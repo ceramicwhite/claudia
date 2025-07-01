@@ -35,38 +35,38 @@ export class AgentService extends BaseService {
    * Creates a new agent
    * @param name - The agent name
    * @param icon - The icon identifier
-   * @param system_prompt - The system prompt for the agent
-   * @param default_task - Optional default task
+   * @param systemPrompt - The system prompt for the agent
+   * @param defaultTask - Optional default task
    * @param model - Optional model (defaults to 'sonnet')
-   * @param sandbox_enabled - Optional sandbox enable flag
-   * @param enable_file_read - Optional file read permission
-   * @param enable_file_write - Optional file write permission
-   * @param enable_network - Optional network permission
+   * @param sandboxEnabled - Optional sandbox enable flag
+   * @param enableFileRead - Optional file read permission
+   * @param enableFileWrite - Optional file write permission
+   * @param enableNetwork - Optional network permission
    * @returns Promise resolving to the created agent
    */
   async createAgent(
     name: string, 
     icon: string, 
-    system_prompt: string, 
-    default_task?: string, 
+    systemPrompt: string, 
+    defaultTask?: string, 
     model?: string, 
-    sandbox_enabled?: boolean,
-    enable_file_read?: boolean,
-    enable_file_write?: boolean,
-    enable_network?: boolean
+    sandboxEnabled?: boolean,
+    enableFileRead?: boolean,
+    enableFileWrite?: boolean,
+    enableNetwork?: boolean
   ): Promise<Agent> {
     return this.invoke<{ name: string; icon: string; systemPrompt: string; defaultTask?: string; model?: string; sandboxEnabled?: boolean; enableFileRead?: boolean; enableFileWrite?: boolean; enableNetwork?: boolean }, Agent>(
       TAURI_COMMANDS.CREATE_AGENT,
       { 
         name, 
         icon, 
-        systemPrompt: system_prompt,
-        defaultTask: default_task,
+        systemPrompt,
+        defaultTask,
         model,
-        sandboxEnabled: sandbox_enabled,
-        enableFileRead: enable_file_read,
-        enableFileWrite: enable_file_write,
-        enableNetwork: enable_network
+        sandboxEnabled,
+        enableFileRead,
+        enableFileWrite,
+        enableNetwork
       },
       ERROR_MESSAGES.FAILED_TO_CREATE_AGENT
     );
@@ -77,26 +77,26 @@ export class AgentService extends BaseService {
    * @param id - The agent ID
    * @param name - The updated name
    * @param icon - The updated icon
-   * @param system_prompt - The updated system prompt
-   * @param default_task - Optional default task
+   * @param systemPrompt - The updated system prompt
+   * @param defaultTask - Optional default task
    * @param model - Optional model
-   * @param sandbox_enabled - Optional sandbox enable flag
-   * @param enable_file_read - Optional file read permission
-   * @param enable_file_write - Optional file write permission
-   * @param enable_network - Optional network permission
+   * @param sandboxEnabled - Optional sandbox enable flag
+   * @param enableFileRead - Optional file read permission
+   * @param enableFileWrite - Optional file write permission
+   * @param enableNetwork - Optional network permission
    * @returns Promise resolving to the updated agent
    */
   async updateAgent(
     id: number, 
     name: string, 
     icon: string, 
-    system_prompt: string, 
-    default_task?: string, 
+    systemPrompt: string, 
+    defaultTask?: string, 
     model?: string, 
-    sandbox_enabled?: boolean,
-    enable_file_read?: boolean,
-    enable_file_write?: boolean,
-    enable_network?: boolean
+    sandboxEnabled?: boolean,
+    enableFileRead?: boolean,
+    enableFileWrite?: boolean,
+    enableNetwork?: boolean
   ): Promise<Agent> {
     return this.invoke<{ id: number; name: string; icon: string; systemPrompt: string; defaultTask?: string; model?: string; sandboxEnabled?: boolean; enableFileRead?: boolean; enableFileWrite?: boolean; enableNetwork?: boolean }, Agent>(
       TAURI_COMMANDS.UPDATE_AGENT,
@@ -104,13 +104,13 @@ export class AgentService extends BaseService {
         id, 
         name, 
         icon, 
-        systemPrompt: system_prompt,
-        defaultTask: default_task,
+        systemPrompt,
+        defaultTask,
         model,
-        sandboxEnabled: sandbox_enabled,
-        enableFileRead: enable_file_read,
-        enableFileWrite: enable_file_write,
-        enableNetwork: enable_network
+        sandboxEnabled,
+        enableFileRead,
+        enableFileWrite,
+        enableNetwork
       },
       ERROR_MESSAGES.FAILED_TO_UPDATE_AGENT
     );

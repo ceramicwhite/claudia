@@ -17,7 +17,7 @@ import { BashWidget } from "./command/BashWidget";
 import { SystemReminderWidget } from "./system/SystemReminderWidget";
 
 // Widget mapping type - components must accept BaseWidgetProps at minimum
-type WidgetComponent = React.FC<any>; // TODO: Fix individual widget components to use proper types
+type WidgetComponent<T extends BaseWidgetProps = BaseWidgetProps> = React.FC<T>;
 
 // Widget registry
 const widgetRegistry: Record<string, WidgetComponent> = {
@@ -93,8 +93,11 @@ export const WidgetFactory: React.FC<WidgetFactoryProps> = ({
 };
 
 // Export function to register new widgets dynamically
-export const registerWidget = (toolName: string, component: WidgetComponent) => {
-  widgetRegistry[toolName] = component;
+export const registerWidget = <T extends BaseWidgetProps = BaseWidgetProps>(
+  toolName: string, 
+  component: WidgetComponent<T>
+) => {
+  widgetRegistry[toolName] = component as WidgetComponent;
 };
 
 // Export function to check if a widget is registered
