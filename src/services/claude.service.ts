@@ -16,7 +16,7 @@ export class ClaudeService extends BaseService {
    * Executes a new interactive Claude Code session with streaming output
    */
   async executeClaudeCode(projectPath: string, prompt: string, model: string): Promise<void> {
-    return this.invoke<void>(
+    return this.invoke<{ projectPath: string; prompt: string; model: string }, void>(
       TAURI_COMMANDS.EXECUTE_CLAUDE_CODE,
       { projectPath, prompt, model }
     );
@@ -26,7 +26,7 @@ export class ClaudeService extends BaseService {
    * Continues an existing Claude Code conversation with streaming output
    */
   async continueClaudeCode(projectPath: string, prompt: string, model: string): Promise<void> {
-    return this.invoke<void>(
+    return this.invoke<{ projectPath: string; prompt: string; model: string }, void>(
       TAURI_COMMANDS.CONTINUE_CLAUDE_CODE,
       { projectPath, prompt, model }
     );
@@ -36,7 +36,7 @@ export class ClaudeService extends BaseService {
    * Resumes an existing Claude Code session by ID with streaming output
    */
   async resumeClaudeCode(projectPath: string, sessionId: string, prompt: string, model: string): Promise<void> {
-    return this.invoke<void>(
+    return this.invoke<{ projectPath: string; sessionId: string; prompt: string; model: string }, void>(
       TAURI_COMMANDS.RESUME_CLAUDE_CODE,
       { projectPath, sessionId, prompt, model }
     );
@@ -47,7 +47,7 @@ export class ClaudeService extends BaseService {
    * @param sessionId - Optional session ID to cancel a specific session
    */
   async cancelClaudeExecution(sessionId?: string): Promise<void> {
-    return this.invoke<void>(
+    return this.invoke<{ sessionId?: string }, void>(
       TAURI_COMMANDS.CANCEL_CLAUDE_EXECUTION,
       { sessionId }
     );

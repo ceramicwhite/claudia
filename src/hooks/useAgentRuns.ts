@@ -20,7 +20,7 @@ export function useAgentRuns(agentId?: number, options: UseAgentRunsOptions = {}
 
   const { data, error, isLoading, mutate } = useSWR<AgentRun[]>(
     agentId ? `agent-runs-${agentId}` : null,
-    () => agentId ? api.getAgentRuns(agentId) : Promise.resolve([]),
+    () => agentId ? api.listAgentRuns(agentId) : Promise.resolve([]),
     {
       refreshInterval,
       revalidateOnFocus,
@@ -42,7 +42,7 @@ export function useAgentRuns(agentId?: number, options: UseAgentRunsOptions = {}
  * Custom hook for fetching a single agent run
  */
 export function useAgentRun(runId?: number) {
-  const { data, error, isLoading, mutate } = useSWR<AgentRun>(
+  const { data, error, isLoading, mutate } = useSWR<AgentRun | null>(
     runId ? `agent-run-${runId}` : null,
     () => runId ? api.getAgentRun(runId) : Promise.resolve(null),
     {
@@ -67,7 +67,7 @@ export function useAgentRun(runId?: number) {
 export function useRunningSessions(pollingInterval = 5000) {
   const { data, error, isLoading, mutate } = useSWR<AgentRun[]>(
     'running-sessions',
-    () => api.listRunningSessions(),
+    () => api.listRunningAgentSessions(),
     {
       refreshInterval: pollingInterval,
       revalidateOnFocus: true,

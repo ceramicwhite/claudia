@@ -35,7 +35,9 @@ pub struct AgentDb(pub Arc<SqlitePool>);
 
 /// Initialize the agents database
 pub fn init_db(data_dir: std::path::PathBuf) -> Result<SqlitePool> {
-    let db_path = data_dir.join("agents.db");
+    // Allow overriding database name via environment variable for dev instances
+    let db_name = std::env::var("AGENTS_DB_NAME").unwrap_or_else(|_| "agents.db".to_string());
+    let db_path = data_dir.join(db_name);
     let pool = create_pool(db_path)?;
     init_pool_db(&pool)?;
     Ok(pool)

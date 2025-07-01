@@ -37,7 +37,7 @@ export class SandboxService extends BaseService {
    * @returns Promise resolving to the created profile
    */
   async createSandboxProfile(name: string, description?: string): Promise<SandboxProfile> {
-    return this.invoke<SandboxProfile>(
+    return this.invoke<{ name: string; description?: string }, SandboxProfile>(
       TAURI_COMMANDS.CREATE_SANDBOX_PROFILE,
       { name, description },
       ERROR_MESSAGES.FAILED_TO_CREATE_SANDBOX_PROFILE
@@ -60,7 +60,7 @@ export class SandboxService extends BaseService {
     is_active: boolean, 
     is_default: boolean
   ): Promise<SandboxProfile> {
-    return this.invoke<SandboxProfile>(
+    return this.invoke<{ id: number; name: string; description: string | undefined; is_active: boolean; is_default: boolean }, SandboxProfile>(
       TAURI_COMMANDS.UPDATE_SANDBOX_PROFILE,
       { id, name, description, is_active, is_default },
       ERROR_MESSAGES.FAILED_TO_UPDATE_SANDBOX_PROFILE
@@ -73,7 +73,7 @@ export class SandboxService extends BaseService {
    * @returns Promise resolving when the profile is deleted
    */
   async deleteSandboxProfile(id: number): Promise<void> {
-    return this.invoke<void>(
+    return this.invoke<{ id: number }, void>(
       TAURI_COMMANDS.DELETE_SANDBOX_PROFILE,
       { id },
       ERROR_MESSAGES.FAILED_TO_DELETE_SANDBOX_PROFILE
@@ -86,7 +86,7 @@ export class SandboxService extends BaseService {
    * @returns Promise resolving to the profile
    */
   async getSandboxProfile(id: number): Promise<SandboxProfile> {
-    return this.invoke<SandboxProfile>(
+    return this.invoke<{ id: number }, SandboxProfile>(
       TAURI_COMMANDS.GET_SANDBOX_PROFILE,
       { id },
       ERROR_MESSAGES.FAILED_TO_GET_SANDBOX_PROFILE
@@ -99,7 +99,7 @@ export class SandboxService extends BaseService {
    * @returns Promise resolving to an array of rules
    */
   async listSandboxRules(profileId: number): Promise<SandboxRule[]> {
-    return this.invoke<SandboxRule[]>(
+    return this.invoke<{ profile_id: number }, SandboxRule[]>(
       TAURI_COMMANDS.LIST_SANDBOX_RULES,
       { profile_id: profileId },
       ERROR_MESSAGES.FAILED_TO_LIST_SANDBOX_RULES
@@ -124,7 +124,14 @@ export class SandboxService extends BaseService {
     enabled: boolean,
     platform_support?: string
   ): Promise<SandboxRule> {
-    return this.invoke<SandboxRule>(
+    return this.invoke<{ 
+      profile_id: number;
+      operation_type: string;
+      pattern_type: string;
+      pattern_value: string;
+      enabled: boolean;
+      platform_support?: string;
+    }, SandboxRule>(
       TAURI_COMMANDS.CREATE_SANDBOX_RULE,
       { 
         profile_id: profileId,
@@ -156,7 +163,14 @@ export class SandboxService extends BaseService {
     enabled: boolean,
     platform_support?: string
   ): Promise<SandboxRule> {
-    return this.invoke<SandboxRule>(
+    return this.invoke<{ 
+      id: number;
+      operation_type: string;
+      pattern_type: string;
+      pattern_value: string;
+      enabled: boolean;
+      platform_support?: string;
+    }, SandboxRule>(
       TAURI_COMMANDS.UPDATE_SANDBOX_RULE,
       { 
         id,
@@ -176,7 +190,7 @@ export class SandboxService extends BaseService {
    * @returns Promise resolving when the rule is deleted
    */
   async deleteSandboxRule(id: number): Promise<void> {
-    return this.invoke<void>(
+    return this.invoke<{ id: number }, void>(
       TAURI_COMMANDS.DELETE_SANDBOX_RULE,
       { id },
       ERROR_MESSAGES.FAILED_TO_DELETE_SANDBOX_RULE
@@ -197,7 +211,7 @@ export class SandboxService extends BaseService {
    * @returns Promise resolving to test result message
    */
   async testSandboxProfile(profileId: number): Promise<string> {
-    return this.invoke<string>(
+    return this.invoke<{ profile_id: number }, string>(
       TAURI_COMMANDS.TEST_SANDBOX_PROFILE,
       { profile_id: profileId },
       ERROR_MESSAGES.FAILED_TO_TEST_SANDBOX_PROFILE
@@ -212,7 +226,7 @@ export class SandboxService extends BaseService {
    * @returns Promise resolving to array of violations
    */
   async listSandboxViolations(profileId?: number, agentId?: number, limit?: number): Promise<SandboxViolation[]> {
-    return this.invoke<SandboxViolation[]>(
+    return this.invoke<{ profile_id?: number; agent_id?: number; limit?: number }, SandboxViolation[]>(
       TAURI_COMMANDS.LIST_SANDBOX_VIOLATIONS,
       { profile_id: profileId, agent_id: agentId, limit },
       ERROR_MESSAGES.FAILED_TO_LIST_SANDBOX_VIOLATIONS
@@ -233,7 +247,15 @@ export class SandboxService extends BaseService {
     processName?: string;
     pid?: number;
   }): Promise<void> {
-    return this.invoke<void>(
+    return this.invoke<{
+      profile_id?: number;
+      agent_id?: number;
+      agent_run_id?: number;
+      operation_type: string;
+      pattern_value?: string;
+      process_name?: string;
+      pid?: number;
+    }, void>(
       TAURI_COMMANDS.LOG_SANDBOX_VIOLATION,
       {
         profile_id: violation.profileId,
@@ -254,7 +276,7 @@ export class SandboxService extends BaseService {
    * @returns Promise resolving to number of deleted violations
    */
   async clearSandboxViolations(olderThanDays?: number): Promise<number> {
-    return this.invoke<number>(
+    return this.invoke<{ older_than_days?: number }, number>(
       TAURI_COMMANDS.CLEAR_SANDBOX_VIOLATIONS,
       { older_than_days: olderThanDays },
       ERROR_MESSAGES.FAILED_TO_CLEAR_SANDBOX_VIOLATIONS
@@ -275,7 +297,7 @@ export class SandboxService extends BaseService {
    * @returns Promise resolving to export data
    */
   async exportSandboxProfile(profileId: number): Promise<SandboxProfileExport> {
-    return this.invoke<SandboxProfileExport>(
+    return this.invoke<{ profile_id: number }, SandboxProfileExport>(
       TAURI_COMMANDS.EXPORT_SANDBOX_PROFILE,
       { profile_id: profileId },
       ERROR_MESSAGES.FAILED_TO_EXPORT_SANDBOX_PROFILE
@@ -296,7 +318,7 @@ export class SandboxService extends BaseService {
    * @returns Promise resolving to import results
    */
   async importSandboxProfiles(exportData: SandboxProfileExport): Promise<ImportResult[]> {
-    return this.invoke<ImportResult[]>(
+    return this.invoke<{ export_data: SandboxProfileExport }, ImportResult[]>(
       TAURI_COMMANDS.IMPORT_SANDBOX_PROFILES,
       { export_data: exportData },
       ERROR_MESSAGES.FAILED_TO_IMPORT_SANDBOX_PROFILES

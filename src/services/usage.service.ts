@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BaseService } from './base.service';
+import { BaseService, ServiceConfig } from './base.service';
 import { TAURI_COMMANDS } from '@/constants';
 import type { 
   UsageStats,
@@ -8,45 +8,55 @@ import type {
 } from '@/lib/api.types';
 
 // Zod schemas for type validation
-const UsageStatsSchema = z.object({
-  total_sessions: z.number(),
-  total_messages: z.number(),
+const ModelUsageSchema = z.object({
+  model: z.string(),
+  total_cost: z.number(),
   total_tokens: z.number(),
-  total_input_tokens: z.number(),
-  total_output_tokens: z.number(),
-  total_cache_read_tokens: z.number(),
-  total_cache_write_tokens: z.number(),
-  avg_tokens_per_session: z.number(),
-  avg_messages_per_session: z.number(),
-  most_active_project: z.string().nullable(),
-  daily_usage: z.array(z.object({
-    date: z.string(),
-    sessions: z.number(),
-    messages: z.number(),
-    tokens: z.number(),
-  })),
+  input_tokens: z.number(),
+  output_tokens: z.number(),
+  cache_creation_tokens: z.number(),
+  cache_read_tokens: z.number(),
+  session_count: z.number(),
+});
+
+const DailyUsageSchema = z.object({
+  date: z.string(),
+  total_cost: z.number(),
+  total_tokens: z.number(),
+  models_used: z.array(z.string()),
 });
 
 const ProjectUsageSchema = z.object({
-  project_id: z.string(),
+  project_path: z.string(),
   project_name: z.string(),
-  session_count: z.number(),
-  message_count: z.number(),
+  total_cost: z.number(),
   total_tokens: z.number(),
+  session_count: z.number(),
   last_used: z.string(),
 });
 
+const UsageStatsSchema = z.object({
+  total_cost: z.number(),
+  total_tokens: z.number(),
+  total_input_tokens: z.number(),
+  total_output_tokens: z.number(),
+  total_cache_creation_tokens: z.number(),
+  total_cache_read_tokens: z.number(),
+  total_sessions: z.number(),
+  by_model: z.array(ModelUsageSchema),
+  by_date: z.array(DailyUsageSchema),
+  by_project: z.array(ProjectUsageSchema),
+});
+
 const UsageEntrySchema = z.object({
-  id: z.string(),
+  project: z.string(),
   timestamp: z.string(),
   model: z.string(),
   input_tokens: z.number(),
   output_tokens: z.number(),
-  cache_read_tokens: z.number(),
   cache_write_tokens: z.number(),
-  total_tokens: z.number(),
-  session_id: z.string(),
-  project_id: z.string(),
+  cache_read_tokens: z.number(),
+  cost: z.number(),
 });
 
 const ProjectUsageArraySchema = z.array(ProjectUsageSchema);
@@ -68,7 +78,7 @@ export class UsageService extends BaseService {
    * @returns Promise resolving to usage statistics
    */
   async getUsageStats(): Promise<UsageStats> {
-    return this.invoke(
+    return this.invoke<{}, UsageStats>(
       TAURI_COMMANDS.GET_USAGE_STATS,
       {},
       UsageStatsSchema
@@ -82,7 +92,7 @@ export class UsageService extends BaseService {
    * @returns Promise resolving to usage statistics
    */
   async getUsageByDateRange(startDate: string, endDate: string): Promise<UsageStats> {
-    return this.invoke(
+    return this.invoke<{ startDate: string; endDate: string }, UsageStats>(
       TAURI_COMMANDS.GET_USAGE_BY_DATE_RANGE,
       { startDate, endDate },
       UsageStatsSchema
@@ -101,7 +111,7 @@ export class UsageService extends BaseService {
     until?: string,
     order?: "asc" | "desc"
   ): Promise<ProjectUsage[]> {
-    return this.invoke(
+    return this.invoke<{ since?: string; until?: string; order?: "asc" | "desc" }, ProjectUsage[]>(
       TAURI_COMMANDS.GET_SESSION_STATS,
       { since, until, order },
       ProjectUsageArraySchema
@@ -114,7 +124,7 @@ export class UsageService extends BaseService {
    * @returns Promise resolving to array of usage entries
    */
   async getUsageDetails(limit?: number): Promise<UsageEntry[]> {
-    return this.invoke(
+    return this.invoke<{ limit?: number }, UsageEntry[]>(
       TAURI_COMMANDS.GET_USAGE_DETAILS,
       { limit },
       UsageEntryArraySchema

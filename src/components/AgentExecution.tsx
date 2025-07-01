@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ClaudeModel, TAURI_EVENTS } from "@/constants";
+import { ClaudeModel } from "@/constants";
 import { 
   ArrowLeft, 
   Play, 

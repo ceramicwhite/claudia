@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BaseService } from './base.service';
+import { BaseService, ServiceConfig } from './base.service';
 import { TAURI_COMMANDS } from '@/constants';
 import type { Session } from '@/lib/api.types';
 
@@ -7,26 +7,16 @@ import type { Session } from '@/lib/api.types';
 const SessionSchema = z.object({
   id: z.string(),
   project_id: z.string(),
-  name: z.string(),
-  created_at: z.string(),
-  updated_at: z.string(),
-  pid: z.number().nullable(),
-  exit_code: z.number().nullable(),
-  finished_at: z.string().nullable(),
-  cancelled_at: z.string().nullable(),
-  output_preview: z.string().nullable(),
-  message_count: z.number(),
-  total_tokens: z.number(),
-  last_checkpoint_id: z.string().nullable(),
-  auto_checkpoint_count: z.number(),
-  checkpoint_id: z.string().nullable(),
-  output_path: z.string().nullable(),
+  project_path: z.string(),
+  todo_data: z.any().optional(),
+  created_at: z.number(),
+  first_message: z.string().optional(),
+  message_timestamp: z.string().optional(),
 });
 
 const SessionArraySchema = z.array(SessionSchema);
 const StringSchema = z.string();
 const MessageArraySchema = z.array(z.any()); // TODO: Define proper message schema
-const VoidSchema = z.void();
 
 /**
  * Service for Claude session operations
@@ -45,7 +35,7 @@ export class SessionService extends BaseService {
    * @returns Promise resolving to an array of sessions
    */
   async getProjectSessions(projectId: string): Promise<Session[]> {
-    return this.invoke(
+    return this.invoke<{ projectId: string }, Session[]>(
       TAURI_COMMANDS.GET_PROJECT_SESSIONS,
       { projectId },
       SessionArraySchema
@@ -58,7 +48,7 @@ export class SessionService extends BaseService {
    * @returns Promise resolving when the session is opened
    */
   async openNewSession(path?: string): Promise<string> {
-    return this.invoke(
+    return this.invoke<{ path?: string }, string>(
       TAURI_COMMANDS.OPEN_NEW_SESSION,
       { path },
       StringSchema
@@ -69,7 +59,7 @@ export class SessionService extends BaseService {
    * Loads the JSONL history for a specific session
    */
   async loadSessionHistory(sessionId: string, projectId: string): Promise<unknown[]> {
-    return this.invoke(
+    return this.invoke<{ sessionId: string; projectId: string }, unknown[]>(
       TAURI_COMMANDS.LOAD_SESSION_HISTORY,
       { sessionId, projectId },
       MessageArraySchema
@@ -85,7 +75,7 @@ export class SessionService extends BaseService {
     projectPath: string, 
     messages: string[]
   ): Promise<void> {
-    return this.invokeVoid(
+    return this.invokeVoid<{ sessionId: string; projectId: string; projectPath: string; messages: string[] }>(
       TAURI_COMMANDS.TRACK_SESSION_MESSAGES,
       { sessionId, projectId, projectPath, messages }
     );

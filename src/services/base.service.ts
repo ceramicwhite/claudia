@@ -158,7 +158,7 @@ export abstract class BaseService {
   protected createTransformer<TInput, TOutput>(
     inputSchema: z.ZodSchema<TInput>,
     transform: (input: TInput) => TOutput
-  ): z.ZodSchema<TOutput> {
+  ): z.ZodEffects<z.ZodSchema<TInput>, TOutput, TInput> {
     return inputSchema.transform(transform);
   }
 

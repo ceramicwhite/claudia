@@ -228,10 +228,13 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
       const history = await api.loadSessionHistory(session.id, session.project_id);
       
       // Convert history to messages format
-      const loadedMessages: ClaudeStreamMessage[] = history.map(entry => ({
-        ...entry,
-        type: entry.type || "assistant"
-      }));
+      const loadedMessages: ClaudeStreamMessage[] = history.map(entry => {
+        const entryObj = entry as any;
+        return {
+          ...entryObj,
+          type: entryObj.type || "assistant"
+        };
+      });
       
       setMessages(loadedMessages);
       setRawJsonlOutput(history.map(h => JSON.stringify(h)));

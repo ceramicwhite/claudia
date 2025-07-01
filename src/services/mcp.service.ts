@@ -32,7 +32,15 @@ export class MCPService extends BaseService {
     url?: string,
     scope: string = "local"
   ): Promise<AddServerResult> {
-    return this.invoke<AddServerResult>(
+    return this.invoke<{
+      name: string;
+      transport: string;
+      command?: string;
+      args: string[];
+      env: Record<string, string>;
+      url?: string;
+      scope: string;
+    }, AddServerResult>(
       TAURI_COMMANDS.MCP_ADD,
       { name, transport, command, args, env, url, scope },
       ERROR_MESSAGES.FAILED_TO_ADD_MCP_SERVER
@@ -50,7 +58,7 @@ export class MCPService extends BaseService {
    * Gets details for a specific MCP server
    */
   async mcpGet(name: string): Promise<MCPServer> {
-    return this.invoke<MCPServer>(
+    return this.invoke<{ name: string }, MCPServer>(
       TAURI_COMMANDS.MCP_GET,
       { name },
       ERROR_MESSAGES.FAILED_TO_GET_MCP_SERVER
@@ -61,7 +69,7 @@ export class MCPService extends BaseService {
    * Removes an MCP server
    */
   async mcpRemove(name: string): Promise<string> {
-    return this.invoke<string>(
+    return this.invoke<{ name: string }, string>(
       TAURI_COMMANDS.MCP_REMOVE,
       { name },
       ERROR_MESSAGES.FAILED_TO_REMOVE_MCP_SERVER
@@ -72,7 +80,7 @@ export class MCPService extends BaseService {
    * Adds an MCP server from JSON configuration
    */
   async mcpAddJson(name: string, jsonConfig: string, scope: string = "local"): Promise<AddServerResult> {
-    return this.invoke<AddServerResult>(
+    return this.invoke<{ name: string; jsonConfig: string; scope: string }, AddServerResult>(
       TAURI_COMMANDS.MCP_ADD_JSON,
       { name, jsonConfig, scope },
       ERROR_MESSAGES.FAILED_TO_ADD_MCP_JSON
@@ -83,7 +91,7 @@ export class MCPService extends BaseService {
    * Imports MCP servers from Claude Desktop
    */
   async mcpAddFromClaudeDesktop(scope: string = "local"): Promise<ImportResult> {
-    return this.invoke<ImportResult>(
+    return this.invoke<{ scope: string }, ImportResult>(
       TAURI_COMMANDS.MCP_ADD_FROM_CLAUDE_DESKTOP,
       { scope },
       ERROR_MESSAGES.FAILED_TO_IMPORT_FROM_CLAUDE_DESKTOP
@@ -101,7 +109,7 @@ export class MCPService extends BaseService {
    * Tests connection to an MCP server
    */
   async mcpTestConnection(name: string): Promise<string> {
-    return this.invoke<string>(
+    return this.invoke<{ name: string }, string>(
       TAURI_COMMANDS.MCP_TEST_CONNECTION,
       { name },
       ERROR_MESSAGES.FAILED_TO_TEST_MCP_CONNECTION
@@ -119,7 +127,7 @@ export class MCPService extends BaseService {
    * Gets the status of MCP servers
    */
   async mcpGetServerStatus(): Promise<Record<string, ServerStatus>> {
-    return this.invoke<Record<string, ServerStatus>>(
+    return this.invoke<undefined, Record<string, ServerStatus>>(
       TAURI_COMMANDS.MCP_GET_SERVER_STATUS,
       undefined,
       ERROR_MESSAGES.FAILED_TO_GET_SERVER_STATUS
@@ -130,7 +138,7 @@ export class MCPService extends BaseService {
    * Reads .mcp.json from the current project
    */
   async mcpReadProjectConfig(projectPath: string): Promise<MCPProjectConfig> {
-    return this.invoke<MCPProjectConfig>(
+    return this.invoke<{ projectPath: string }, MCPProjectConfig>(
       TAURI_COMMANDS.MCP_READ_PROJECT_CONFIG,
       { projectPath },
       ERROR_MESSAGES.FAILED_TO_READ_PROJECT_CONFIG
@@ -141,7 +149,7 @@ export class MCPService extends BaseService {
    * Saves .mcp.json to the current project
    */
   async mcpSaveProjectConfig(projectPath: string, config: MCPProjectConfig): Promise<string> {
-    return this.invoke<string>(
+    return this.invoke<{ projectPath: string; config: MCPProjectConfig }, string>(
       TAURI_COMMANDS.MCP_SAVE_PROJECT_CONFIG,
       { projectPath, config },
       ERROR_MESSAGES.FAILED_TO_SAVE_PROJECT_CONFIG

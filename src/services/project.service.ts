@@ -32,33 +32,30 @@ const ClaudeSettingsSchema = z.object({
 });
 
 const ClaudeVersionStatusSchema = z.object({
-  installed: z.boolean(),
-  version: nullable(z.string()),
-  path: nullable(FilePathSchema),
-  error: nullable(z.string()),
+  is_installed: z.boolean(),
+  version: z.string().optional(),
+  output: z.string(),
 });
 
 const ClaudeMdFileSchema = z.object({
-  path: FilePathSchema,
-  relativePath: z.string(),
-  type: z.enum(['project', 'user', 'system']),
-  exists: z.boolean(),
-  content: z.string().optional(),
+  relative_path: z.string(),
+  absolute_path: FilePathSchema,
+  size: z.number(),
+  modified: z.number(),
 });
 
 const FileEntrySchema = z.object({
   name: z.string(),
   path: FilePathSchema,
   is_directory: z.boolean(),
-  size: z.number().optional(),
-  modified: z.number().optional(),
+  size: z.number(),
+  extension: z.string().optional(),
 });
 
 const ClaudeInstallationSchema = z.object({
   path: FilePathSchema,
-  version: z.string(),
-  is_default: z.boolean(),
-  source: z.enum(['system', 'homebrew', 'npm', 'manual']),
+  version: z.string().optional(),
+  source: z.string(),
 });
 
 /**
@@ -80,24 +77,24 @@ export class ProjectService extends BaseService {
    * Lists all projects in the ~/.claude/projects directory
    */
   async listProjects(): Promise<Project[]> {
-    const projects = await this.invoke(
+    const result = await this.invoke<{}, any>(
       'list_projects',
-      {},
-      z.array(ProjectSchema).transform(items => items.map(transformProject))
+      {}
     );
-    
-    return projects;
+    // Validate and transform
+    const validated = z.array(ProjectSchema).parse(result);
+    return validated.map(transformProject);
   }
 
   /**
    * Get project with statistics
    */
   async getProjectWithStats(projectId: string): Promise<ProjectWithStats> {
-    return this.invoke(
+    const result = await this.invoke<{ projectId: string }, any>(
       'get_project_with_stats',
-      { projectId },
-      ProjectWithStatsSchema
+      { projectId }
     );
+    return ProjectWithStatsSchema.parse(result);
   }
 
   /**
@@ -107,11 +104,12 @@ export class ProjectService extends BaseService {
     // Validate params
     const validated = CreateProjectParamsSchema.parse(params);
     
-    return this.invoke(
+    const result = await this.invoke<CreateProjectParams, any>(
       'create_project',
-      validated,
-      ProjectSchema.transform(transformProject)
+      validated
     );
+    const parsed = ProjectSchema.parse(result);
+    return transformProject(parsed);
   }
 
   /**
@@ -121,18 +119,19 @@ export class ProjectService extends BaseService {
     // Validate params
     const validated = UpdateProjectParamsSchema.parse(params);
     
-    return this.invoke(
+    const result = await this.invoke<{ projectId: string } & UpdateProjectParams, any>(
       'update_project',
-      { projectId, ...validated },
-      ProjectSchema.transform(transformProject)
+      { projectId, ...validated }
     );
+    const parsed = ProjectSchema.parse(result);
+    return transformProject(parsed);
   }
 
   /**
    * Delete a project
    */
   async deleteProject(projectId: string): Promise<void> {
-    return this.invokeVoid(
+    return this.invokeVoid<{ projectId: string }>(
       'delete_project',
       { projectId }
     );
@@ -142,10 +141,10 @@ export class ProjectService extends BaseService {
    * Reads the Claude settings file
    */
   async getClaudeSettings(): Promise<ClaudeSettings> {
-    const result = await this.invoke(
+    const result = await this.invoke<{}, ClaudeSettings>(
       'get_claude_settings',
       {},
-      z.object({ data: ClaudeSettingsSchema }).transform(r => r.data)
+      ClaudeSettingsSchema
     );
     
     return result;
@@ -158,7 +157,7 @@ export class ProjectService extends BaseService {
     // Validate settings
     const validated = ClaudeSettingsSchema.parse(settings);
     
-    await this.invokeVoid(
+    await this.invokeVoid<{ settings: ClaudeSettings }>(
       'save_claude_settings',
       { settings: validated }
     );
@@ -169,7 +168,7 @@ export class ProjectService extends BaseService {
    */
   async checkClaudeVersion(): Promise<ClaudeVersionStatus> {
     try {
-      return await this.invoke(
+      return await this.invoke<{}, ClaudeVersionStatus>(
         'check_claude_version',
         {},
         ClaudeVersionStatusSchema
@@ -193,7 +192,7 @@ export class ProjectService extends BaseService {
     // Validate path
     const validatedPath = FilePathSchema.parse(projectPath);
     
-    return this.invoke(
+    return this.invoke<{ projectPath: string }, ClaudeMdFile[]>(
       'find_claude_md_files',
       { projectPath: validatedPath },
       z.array(ClaudeMdFileSchema)
@@ -207,7 +206,7 @@ export class ProjectService extends BaseService {
     // Validate path
     const validatedPath = FilePathSchema.parse(filePath);
     
-    return this.invoke(
+    return this.invoke<{ filePath: string }, string>(
       'read_claude_md_file',
       { filePath: validatedPath },
       z.string()
@@ -222,7 +221,7 @@ export class ProjectService extends BaseService {
     const validatedPath = FilePathSchema.parse(filePath);
     const validatedContent = NonEmptyStringSchema.parse(content);
     
-    await this.invokeVoid(
+    await this.invokeVoid<{ filePath: string; content: string }>(
       'save_claude_md_file',
       { filePath: validatedPath, content: validatedContent }
     );
@@ -232,7 +231,7 @@ export class ProjectService extends BaseService {
    * Reads the CLAUDE.md system prompt file
    */
   async getSystemPrompt(): Promise<string> {
-    return this.invoke(
+    return this.invoke<{}, string>(
       'get_system_prompt',
       {},
       z.string()
@@ -246,7 +245,7 @@ export class ProjectService extends BaseService {
     // Validate content
     const validatedContent = NonEmptyStringSchema.parse(content);
     
-    await this.invokeVoid(
+    await this.invokeVoid<{ content: string }>(
       'save_system_prompt',
       { content: validatedContent }
     );
@@ -259,7 +258,7 @@ export class ProjectService extends BaseService {
     // Validate path
     const validatedPath = FilePathSchema.parse(directoryPath);
     
-    return this.invoke(
+    return this.invoke<{ directoryPath: string }, FileEntry[]>(
       'list_directory_contents',
       { directoryPath: validatedPath },
       z.array(FileEntrySchema)
@@ -274,7 +273,7 @@ export class ProjectService extends BaseService {
     const validatedPath = FilePathSchema.parse(basePath);
     const validatedQuery = NonEmptyStringSchema.parse(query);
     
-    return this.invoke(
+    return this.invoke<{ basePath: string; query: string }, FileEntry[]>(
       'search_files',
       { basePath: validatedPath, query: validatedQuery },
       z.array(FileEntrySchema)
@@ -285,7 +284,7 @@ export class ProjectService extends BaseService {
    * Get the stored Claude binary path from settings
    */
   async getClaudeBinaryPath(): Promise<string | null> {
-    return this.invoke(
+    return this.invoke<{}, string | null>(
       'get_claude_binary_path',
       {},
       nullable(FilePathSchema)
@@ -299,7 +298,7 @@ export class ProjectService extends BaseService {
     // Validate path
     const validatedPath = FilePathSchema.parse(path);
     
-    await this.invokeVoid(
+    await this.invokeVoid<{ path: string }>(
       'set_claude_binary_path',
       { path: validatedPath }
     );
@@ -309,7 +308,7 @@ export class ProjectService extends BaseService {
    * List all available Claude installations on the system
    */
   async listClaudeInstallations(): Promise<ClaudeInstallation[]> {
-    return this.invoke(
+    return this.invoke<{}, ClaudeInstallation[]>(
       'list_claude_installations',
       {},
       z.array(ClaudeInstallationSchema)
@@ -328,7 +327,7 @@ export class ProjectService extends BaseService {
     const validatedUrl = z.string().url().parse(url);
     const validatedSelector = selector ? NonEmptyStringSchema.parse(selector) : null;
     
-    return this.invoke(
+    return this.invoke<{ url: string; selector: string | null; fullPage: boolean }, string>(
       'capture_url_screenshot',
       { 
         url: validatedUrl, 
@@ -346,7 +345,7 @@ export class ProjectService extends BaseService {
     // Validate input
     const validatedMinutes = z.number().int().positive().parse(olderThanMinutes);
     
-    return this.invoke(
+    return this.invoke<{ olderThanMinutes: number }, number>(
       'cleanup_screenshot_temp_files',
       { olderThanMinutes: validatedMinutes },
       z.number().int().nonnegative()

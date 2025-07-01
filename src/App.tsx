@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Loader2, Bot, FolderCode } from "lucide-react";
 import { api, type Session, type ClaudeMdFile } from "@/lib/api";
-import { type Project } from "@/schemas/project";
+import { type Project as ProjectOld } from "@/lib/api";
 import { OutputCacheProvider } from "@/lib/outputCache";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -28,8 +28,8 @@ type View = "welcome" | "projects" | "agents" | "editor" | "settings" | "claude-
  */
 function App() {
   const [view, setView] = useState<View>("welcome");
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [projects, setProjects] = useState<ProjectOld[]>([]);
+  const [selectedProject, setSelectedProject] = useState<ProjectOld | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [editingClaudeFile, setEditingClaudeFile] = useState<ClaudeMdFile | null>(null);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
@@ -77,7 +77,14 @@ function App() {
       setLoading(true);
       setError(null);
       const projectList = await api.listProjects();
-      setProjects(projectList);
+      // Transform new Project type to match the old type expected by ProjectList
+      const transformedProjects = projectList.map(p => ({
+        id: p.id,
+        path: p.path,
+        sessions: [], // Sessions will be loaded separately when project is selected
+        created_at: Math.floor(new Date(p.created_at).getTime() / 1000) // Convert to Unix timestamp
+      }));
+      setProjects(transformedProjects);
     } catch (err) {
       setError("Failed to load projects. Please ensure ~/.claude directory exists.");
     } finally {
@@ -88,7 +95,7 @@ function App() {
   /**
    * Handles project selection and loads its sessions
    */
-  const handleProjectClick = async (project: Project) => {
+  const handleProjectClick = async (project: ProjectOld) => {
     try {
       setLoading(true);
       setError(null);
@@ -307,7 +314,7 @@ function App() {
                       {projects.length > 0 ? (
                         <ProjectList
                           projects={projects}
-                          onProjectClick={handleProjectClick}
+                          onProjectClick={(project) => { handleProjectClick(project); }}
                         />
                       ) : (
                         <div className="py-8 text-center">

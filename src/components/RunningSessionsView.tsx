@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Clock, RefreshCw, ArrowLeft, Pause, ChevronDown, XCircle, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';

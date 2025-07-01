@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Search, Code, FolderOpen, FilePlus, X, ChevronDown, ChevronRight, AlertCircle, FileText } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { claudeSyntaxTheme } from "@/lib/claudeSyntaxTheme";

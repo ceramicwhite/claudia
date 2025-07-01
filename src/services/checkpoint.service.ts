@@ -30,7 +30,7 @@ export class CheckpointService extends BaseService {
     messageIndex?: number,
     description?: string
   ): Promise<CheckpointResult> {
-    return this.invoke<CheckpointResult>(
+    return this.invoke<{ sessionId: string; projectId: string; projectPath: string; messageIndex?: number; description?: string }, CheckpointResult>(
       TAURI_COMMANDS.CREATE_CHECKPOINT,
       { sessionId, projectId, projectPath, messageIndex, description }
     );
@@ -45,7 +45,7 @@ export class CheckpointService extends BaseService {
     projectId: string,
     projectPath: string
   ): Promise<CheckpointResult> {
-    return this.invoke<CheckpointResult>(
+    return this.invoke<{ checkpointId: string; sessionId: string; projectId: string; projectPath: string }, CheckpointResult>(
       TAURI_COMMANDS.RESTORE_CHECKPOINT,
       { checkpointId, sessionId, projectId, projectPath }
     );
@@ -59,7 +59,7 @@ export class CheckpointService extends BaseService {
     projectId: string,
     projectPath: string
   ): Promise<Checkpoint[]> {
-    return this.invoke<Checkpoint[]>(
+    return this.invoke<{ sessionId: string; projectId: string; projectPath: string }, Checkpoint[]>(
       TAURI_COMMANDS.LIST_CHECKPOINTS,
       { sessionId, projectId, projectPath }
     );
@@ -76,7 +76,7 @@ export class CheckpointService extends BaseService {
     newSessionId: string,
     description?: string
   ): Promise<CheckpointResult> {
-    return this.invoke<CheckpointResult>(
+    return this.invoke<{ checkpointId: string; sessionId: string; projectId: string; projectPath: string; newSessionId: string; description?: string }, CheckpointResult>(
       TAURI_COMMANDS.FORK_FROM_CHECKPOINT,
       { checkpointId, sessionId, projectId, projectPath, newSessionId, description }
     );
@@ -90,7 +90,7 @@ export class CheckpointService extends BaseService {
     projectId: string,
     projectPath: string
   ): Promise<SessionTimeline> {
-    return this.invoke<SessionTimeline>(
+    return this.invoke<{ sessionId: string; projectId: string; projectPath: string }, SessionTimeline>(
       TAURI_COMMANDS.GET_SESSION_TIMELINE,
       { sessionId, projectId, projectPath }
     );
@@ -106,7 +106,7 @@ export class CheckpointService extends BaseService {
     autoCheckpointEnabled: boolean,
     checkpointStrategy: CheckpointStrategy
   ): Promise<void> {
-    return this.invoke<void>(
+    return this.invoke<{ sessionId: string; projectId: string; projectPath: string; autoCheckpointEnabled: boolean; checkpointStrategy: CheckpointStrategy }, void>(
       TAURI_COMMANDS.UPDATE_CHECKPOINT_SETTINGS,
       { sessionId, projectId, projectPath, autoCheckpointEnabled, checkpointStrategy }
     );
@@ -121,7 +121,7 @@ export class CheckpointService extends BaseService {
     sessionId: string,
     projectId: string
   ): Promise<CheckpointDiff> {
-    return this.invoke<CheckpointDiff>(
+    return this.invoke<{ fromCheckpointId: string; toCheckpointId: string; sessionId: string; projectId: string }, CheckpointDiff>(
       TAURI_COMMANDS.GET_CHECKPOINT_DIFF,
       { fromCheckpointId, toCheckpointId, sessionId, projectId },
       ERROR_MESSAGES.FAILED_TO_GET_CHECKPOINT_DIFF
@@ -137,7 +137,7 @@ export class CheckpointService extends BaseService {
     projectPath: string,
     message: string
   ): Promise<void> {
-    return this.invoke<void>(
+    return this.invoke<{ sessionId: string; projectId: string; projectPath: string; message: string }, void>(
       TAURI_COMMANDS.TRACK_CHECKPOINT_MESSAGE,
       { sessionId, projectId, projectPath, message },
       ERROR_MESSAGES.FAILED_TO_TRACK_CHECKPOINT_MESSAGE
@@ -153,7 +153,7 @@ export class CheckpointService extends BaseService {
     projectPath: string,
     message: string
   ): Promise<boolean> {
-    return this.invoke<boolean>(
+    return this.invoke<{ sessionId: string; projectId: string; projectPath: string; message: string }, boolean>(
       TAURI_COMMANDS.CHECK_AUTO_CHECKPOINT,
       { sessionId, projectId, projectPath, message },
       ERROR_MESSAGES.FAILED_TO_CHECK_AUTO_CHECKPOINT
@@ -169,7 +169,7 @@ export class CheckpointService extends BaseService {
     projectPath: string,
     keepCount: number
   ): Promise<number> {
-    return this.invoke<number>(
+    return this.invoke<{ sessionId: string; projectId: string; projectPath: string; keepCount: number }, number>(
       TAURI_COMMANDS.CLEANUP_OLD_CHECKPOINTS,
       { sessionId, projectId, projectPath, keepCount },
       ERROR_MESSAGES.FAILED_TO_CLEANUP_OLD_CHECKPOINTS
@@ -189,7 +189,12 @@ export class CheckpointService extends BaseService {
     total_checkpoints: number;
     current_checkpoint_id?: string;
   }> {
-    return this.invoke(
+    return this.invoke<{ sessionId: string; projectId: string; projectPath: string }, {
+      auto_checkpoint_enabled: boolean;
+      checkpoint_strategy: CheckpointStrategy;
+      total_checkpoints: number;
+      current_checkpoint_id?: string;
+    }>(
       TAURI_COMMANDS.GET_CHECKPOINT_SETTINGS,
       { sessionId, projectId, projectPath },
       ERROR_MESSAGES.FAILED_TO_GET_CHECKPOINT_SETTINGS
@@ -200,7 +205,7 @@ export class CheckpointService extends BaseService {
    * Clears checkpoint manager for a session (cleanup on session end)
    */
   async clearCheckpointManager(sessionId: string): Promise<void> {
-    return this.invoke<void>(
+    return this.invoke<{ sessionId: string }, void>(
       TAURI_COMMANDS.CLEAR_CHECKPOINT_MANAGER,
       { sessionId },
       ERROR_MESSAGES.FAILED_TO_CLEAR_CHECKPOINT_MANAGER

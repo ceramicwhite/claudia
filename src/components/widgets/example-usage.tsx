@@ -142,7 +142,7 @@ export const ToolExecutionExample: React.FC = () => {
 };
 
 // Helper function to simulate tool execution
-async function simulateToolExecution(toolName: string, params: any) {
+async function simulateToolExecution(toolName: string, _params: any) {
   // Simulate async operation
   await new Promise(resolve => setTimeout(resolve, 1000));
   

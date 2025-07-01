@@ -115,7 +115,7 @@ export class ValidationError extends AppError {
  */
 export class TauriError extends AppError {
   constructor(message: string, command?: string, details?: unknown) {
-    super(ErrorCode.TAURI_INVOKE, message, { command, ...details });
+    super(ErrorCode.TAURI_INVOKE, message, { command, ...(details as any || {}) });
   }
 }
 
@@ -133,7 +133,7 @@ export class ClaudeError extends AppError {
  */
 export class AgentError extends AppError {
   constructor(code: ErrorCode, message: string, agentId?: string, details?: unknown) {
-    super(code, message, { agentId, ...details });
+    super(code, message, { agentId, ...(details as any || {}) });
   }
 }
 
@@ -142,7 +142,7 @@ export class AgentError extends AppError {
  */
 export class McpError extends AppError {
   constructor(message: string, serverId?: string, details?: unknown) {
-    super(ErrorCode.MCP_SERVER_ERROR, message, { serverId, ...details });
+    super(ErrorCode.MCP_SERVER_ERROR, message, { serverId, ...(details as any || {}) });
   }
 }
 
