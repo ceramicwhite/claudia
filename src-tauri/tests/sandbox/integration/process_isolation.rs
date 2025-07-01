@@ -1,6 +1,5 @@
 //! Integration tests for process isolation in sandbox
 use crate::sandbox::common::*;
-use crate::skip_if_unsupported;
 use claudia_lib::sandbox::executor::SandboxExecutor;
 use gaol::profile::{AddressPattern, Operation, PathPattern, Profile};
 use serial_test::serial;

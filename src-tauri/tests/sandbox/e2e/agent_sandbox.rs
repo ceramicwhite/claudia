@@ -1,6 +1,5 @@
 //! End-to-end tests for agent execution with sandbox profiles
 use crate::sandbox::common::*;
-use crate::skip_if_unsupported;
 use serial_test::serial;
 
 /// Test agent execution with minimal sandbox profile

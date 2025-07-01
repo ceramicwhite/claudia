@@ -1,5 +1,8 @@
 //! Test modules for Claudia backend
 
+// Common test utilities
+mod test_utils;
+
 // Existing test modules
 #[cfg(test)]
 mod sandbox;

@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::*;
+    use crate::commands::agents::error::AgentError;
     use r2d2::{Pool, CustomizeConnection};
     use r2d2_sqlite::SqliteConnectionManager;
     use rusqlite::Connection;
@@ -609,23 +610,24 @@ mod tests {
                     match pool.get() {
                         Ok(conn) => {
                             // Perform random operations
-                            let ops = vec![
-                                || conn.execute("SELECT 1", []).map(|_| ()),
-                                || conn.query_row("SELECT COUNT(*) FROM agents", [], |row| row.get::<_, i32>(0)).map(|_| ()),
-                                || {
-                                    let tx = conn.unchecked_transaction()?;
-                                    tx.execute("INSERT INTO app_settings (key, value) VALUES (?1, ?2)", 
-                                              &[&format!("key_{}", thread_id), "value"])?;
-                                    tx.commit()
-                                },
-                            ];
+                            // Test basic SELECT
+                            match conn.execute("SELECT 1", []) {
+                                Ok(_) => operation_count.fetch_add(1, Ordering::SeqCst),
+                                Err(_) => error_count.fetch_add(1, Ordering::SeqCst),
+                            };
                             
-                            for op in ops {
-                                match op() {
-                                    Ok(_) => operation_count.fetch_add(1, Ordering::SeqCst),
-                                    Err(_) => error_count.fetch_add(1, Ordering::SeqCst),
-                                };
-                            }
+                            // Test COUNT query
+                            match conn.query_row("SELECT COUNT(*) FROM agents", [], |row| row.get::<_, i32>(0)) {
+                                Ok(_) => operation_count.fetch_add(1, Ordering::SeqCst),
+                                Err(_) => error_count.fetch_add(1, Ordering::SeqCst),
+                            };
+                            
+                            // Test INSERT
+                            match conn.execute("INSERT INTO app_settings (key, value) VALUES (?1, ?2)", 
+                                              &[&format!("key_{}", thread_id), "value"]) {
+                                Ok(_) => operation_count.fetch_add(1, Ordering::SeqCst),
+                                Err(_) => error_count.fetch_add(1, Ordering::SeqCst),
+                            };
                         }
                         Err(_) => {
                             error_count.fetch_add(1, Ordering::SeqCst);

@@ -221,35 +221,32 @@ not valid json
     }
 }
 
+// Helper function to parse usage limit errors
+pub fn parse_usage_limit_error(output: &str) -> Option<String> {
+    use chrono::{DateTime, Utc, Duration};
+
+    // Check if the output contains the usage limit error pattern
+    if output.contains("Claude AI usage limit reached|") {
+        // Extract the timestamp
+        if let Some(pipe_pos) = output.rfind('|') {
+            let timestamp_str = &output[pipe_pos + 1..].trim();
+            if let Ok(timestamp) = timestamp_str.parse::<i64>() {
+                return Some(timestamp.to_string());
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod usage_limit_tests {
     use chrono::{DateTime, Utc, Duration};
 
-    fn parse_usage_limit_error(output: &str) -> Option<String> {
-        // Check if the output contains the usage limit error pattern
-        if output.contains("Claude AI usage limit reached|") {
-            // Extract the timestamp
-            if let Some(pipe_pos) = output.rfind('|') {
-                let timestamp = &output[pipe_pos + 1..];
-                // Convert epoch to ISO 8601 and add 1 minute buffer
-                if let Ok(epoch) = timestamp.trim().parse::<i64>() {
-                    let datetime = DateTime::<Utc>::from_timestamp(epoch, 0)
-                        .map(|dt| {
-                            // Add 1 minute (60 seconds) buffer to avoid hitting the limit immediately
-                            let buffered_time = dt + Duration::seconds(60);
-                            buffered_time.to_rfc3339()
-                        });
-                    return datetime;
-                }
-            }
-        }
-        None
-    }
 
     #[test]
     fn test_parse_usage_limit_error_valid() {
         let output = "Error: Claude AI usage limit reached|1704067200";
-        let result = parse_usage_limit_error(output);
+        let result = super::parse_usage_limit_error(output);
         
         assert!(result.is_some());
         let reset_time = result.unwrap();
@@ -261,28 +258,28 @@ mod usage_limit_tests {
     #[test]
     fn test_parse_usage_limit_error_no_match() {
         let output = "Some other error message";
-        let result = parse_usage_limit_error(output);
+        let result = super::parse_usage_limit_error(output);
         assert!(result.is_none());
     }
 
     #[test]
     fn test_parse_usage_limit_error_invalid_timestamp() {
         let output = "Claude AI usage limit reached|not_a_number";
-        let result = parse_usage_limit_error(output);
+        let result = super::parse_usage_limit_error(output);
         assert!(result.is_none());
     }
 
     #[test]
     fn test_parse_usage_limit_error_missing_pipe() {
         let output = "Claude AI usage limit reached";
-        let result = parse_usage_limit_error(output);
+        let result = super::parse_usage_limit_error(output);
         assert!(result.is_none());
     }
 
     #[test]
     fn test_parse_usage_limit_error_with_extra_content() {
         let output = "Some prefix text\nClaude AI usage limit reached|1704067200\nSome suffix";
-        let result = parse_usage_limit_error(output);
+        let result = super::parse_usage_limit_error(output);
         
         assert!(result.is_some());
         assert!(result.unwrap().contains("2024-01-01T00:01:00"));
@@ -293,6 +290,7 @@ mod usage_limit_tests {
 mod migration_tests {
     use rusqlite::{Connection, params};
     use tempfile::TempDir;
+    use super::parse_usage_limit_error;
 
     fn create_test_db() -> (TempDir, Connection) {
         let temp_dir = TempDir::new().unwrap();
@@ -358,7 +356,7 @@ mod migration_tests {
                 for line in content.lines() {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
                         if let Some(output) = json.get("content").and_then(|c| c.as_str()) {
-                            if let Some(reset_time) = super::usage_limit_tests::parse_usage_limit_error(output) {
+                            if let Some(reset_time) = parse_usage_limit_error(output) {
                                 let _ = conn.execute(
                                     "UPDATE agent_runs SET usage_limit_reset_time = ?1 WHERE id = ?2",
                                     params![reset_time, run_id],

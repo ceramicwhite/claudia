@@ -1,6 +1,5 @@
 //! Integration tests for file operations in sandbox
 use crate::sandbox::common::*;
-use crate::skip_if_unsupported;
 use claudia_lib::sandbox::executor::SandboxExecutor;
 use claudia_lib::sandbox::profile::ProfileBuilder;
 use gaol::profile::{Operation, PathPattern, Profile};

@@ -4,9 +4,9 @@
 mod integration_tests {
     use chrono::{Utc, Duration};
     use rusqlite::{Connection, params};
-    use std::sync::Arc;
+    
     use tempfile::TempDir;
-    use tokio::sync::Mutex;
+    
 
     fn create_full_test_db() -> (TempDir, Connection) {
         let temp_dir = TempDir::new().unwrap();

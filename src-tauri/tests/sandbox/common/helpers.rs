@@ -11,10 +11,9 @@ pub fn is_sandboxing_supported() -> bool {
 }
 
 /// Skip test if sandboxing is not supported
-#[macro_export]
 macro_rules! skip_if_unsupported {
     () => {
-        if !$crate::sandbox::common::is_sandboxing_supported() {
+        if !crate::sandbox::common::helpers::is_sandboxing_supported() {
             eprintln!(
                 "Skipping test: sandboxing not supported on {}",
                 std::env::consts::OS

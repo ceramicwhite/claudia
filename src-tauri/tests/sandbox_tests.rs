@@ -5,7 +5,9 @@
 #![allow(dead_code)]
 
 #[cfg(unix)]
+#[path = "sandbox/mod.rs"]
 mod sandbox;
 
 // Re-export test modules to make them discoverable
+#[cfg(unix)]
 pub use sandbox::*;

@@ -1,6 +1,5 @@
 //! Integration tests for sandbox violation detection and logging
 use crate::sandbox::common::*;
-use crate::skip_if_unsupported;
 use claudia_lib::sandbox::executor::SandboxExecutor;
 use gaol::profile::{Operation, PathPattern, Profile};
 use serial_test::serial;

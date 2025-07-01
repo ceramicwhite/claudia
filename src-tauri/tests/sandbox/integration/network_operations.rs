@@ -1,6 +1,5 @@
 //! Integration tests for network operations in sandbox
 use crate::sandbox::common::*;
-use crate::skip_if_unsupported;
 use claudia_lib::sandbox::executor::SandboxExecutor;
 use gaol::profile::{AddressPattern, Operation, Profile};
 use serial_test::serial;

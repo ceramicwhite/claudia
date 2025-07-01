@@ -47,24 +47,28 @@ agents/
 - `update_agent` - Update existing agent
 - `delete_agent` - Delete agent
 - `get_agent` - Get single agent
-- `list_agent_runs` - List agent runs
-- `execute_agent` - Execute agent (partial - needs ProcessRegistry integration)
+- `list_agent_runs` - List agent runs with metrics
+- `execute_agent` - Execute agent with full process management
+- `cancel_run` - Cancel running agent
+- `resume_run` - Resume paused agent run
+- `import_agent` - Import agent from JSON
+- `export_agent` - Export agent to JSON
+- `import_agent_from_file` - Import from file path
+- `export_agent_to_file` - Export to file path
+- `import_agent_from_github` - Import from GitHub URL
+- `get_scheduled_agent_runs` - Get scheduled runs
+- `create_scheduled_agent_run` - Create scheduled run
+- `cancel_scheduled_agent_run` - Cancel scheduled run
+- `stream_session_output` - Stream output from session
+- `list_claude_installations` - Discover Claude installations
 
-### Pending Functions (Phase 2)
-- Session management functions
-- Import/export functions
-- GitHub integration
-- Scheduled runs
-- Process monitoring
-- Output streaming
+## Implementation Notes
 
-## Known Issues
+1. **ProcessRegistry Integration**: Successfully integrated with the ProcessRegistry using `register_process` and `take_child` methods for proper process lifecycle management.
 
-1. **ProcessRegistry Integration**: The current ProcessRegistry expects ownership of the Child process, but our refactored code needs to access stdout/stderr first. This needs a design change in Phase 2.
+2. **Database Connections**: Connection pooling is properly implemented using r2d2 with appropriate pool sizing.
 
-2. **Database Connections in Async Tasks**: We're opening new connections in spawned tasks instead of passing the state. This works but could be improved.
-
-3. **Enum Usage**: We're still using String for status fields to maintain backward compatibility. Phase 2 will convert these to proper enums.
+3. **Status Field**: The `status` field remains as String in the database for backwards compatibility, with helper methods on `AgentRun` to work with the `RunStatus` enum.
 
 ## Usage
 
