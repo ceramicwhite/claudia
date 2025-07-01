@@ -2,7 +2,6 @@ use super::constants::*;
 use super::error::AgentError;
 use super::types::*;
 use chrono::{DateTime, Utc};
-use rusqlite::Connection;
 use serde_json::Value as JsonValue;
 
 /// Calculate total cost from token counts based on model
@@ -378,3 +377,7 @@ pub fn kill_process_tree(pid: u32) -> Result<(), AgentError> {
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "helpers_tests.rs"]
+mod tests;

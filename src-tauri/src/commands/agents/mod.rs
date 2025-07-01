@@ -8,6 +8,18 @@ pub mod repository;
 pub mod service;
 pub mod types;
 
+#[cfg(test)]
+mod error_tests;
+
+#[cfg(test)]
+mod repository_test;
+
+#[cfg(test)]
+mod service_tests;
+
+#[cfg(test)]
+mod pool_tests;
+
 // Re-export main functionality
 pub use commands::*;
 pub use error::AgentError;

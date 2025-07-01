@@ -591,3 +591,6 @@ pub fn read_agent_output_file(app_data_dir: &std::path::Path, run_id: i64) -> Re
     fs::read_to_string(output_file)
         .map_err(|e| format!("Failed to read output file: {}", e))
 }
+
+#[cfg(test)]
+mod commands_focused_tests;
