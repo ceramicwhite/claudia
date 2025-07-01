@@ -389,13 +389,13 @@ export class AgentService extends BaseService {
 
   /**
    * Get real-time output for a running session (with live output fallback)
-   * @param runId - The run ID to get output for
+   * @param sessionId - The session ID to get output for
    * @returns Promise resolving to the current session output (JSONL format)
    */
-  async getSessionOutput(runId: number): Promise<string> {
-    return this.invoke<{ runId: number }, string>(
+  async getSessionOutput(sessionId: string): Promise<string> {
+    return this.invoke<{ sessionId: string }, string>(
       TAURI_COMMANDS.GET_SESSION_OUTPUT,
-      { runId },
+      { sessionId },
       ERROR_MESSAGES.FAILED_TO_GET_SESSION_OUTPUT
     );
   }
@@ -415,13 +415,13 @@ export class AgentService extends BaseService {
 
   /**
    * Start streaming real-time output for a running session
-   * @param runId - The run ID to stream output for
+   * @param sessionId - The session ID to stream output for
    * @returns Promise that resolves when streaming starts
    */
-  async streamSessionOutput(runId: number): Promise<void> {
-    return this.invoke<{ runId: number }, void>(
+  async streamSessionOutput(sessionId: string): Promise<void> {
+    return this.invoke<{ sessionId: string }, void>(
       TAURI_COMMANDS.STREAM_SESSION_OUTPUT,
-      { runId },
+      { sessionId },
       ERROR_MESSAGES.FAILED_TO_START_STREAMING
     );
   }

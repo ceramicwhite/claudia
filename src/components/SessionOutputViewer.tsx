@@ -109,7 +109,7 @@ export function SessionOutputViewer({ session, onClose, className }: SessionOutp
       }
 
       setLoading(true);
-      const rawOutput = await api.getSessionOutput(session.id);
+      const rawOutput = await api.getSessionOutput(session.session_id);
       
       // Parse JSONL output into messages using AgentExecution style
       const jsonlLines = rawOutput.split('\n').filter(line => line.trim());
@@ -139,7 +139,7 @@ export function SessionOutputViewer({ session, onClose, className }: SessionOutp
         setupLiveEventListeners();
         
         try {
-          await api.streamSessionOutput(session.id);
+          await api.streamSessionOutput(session.session_id);
         } catch (streamError) {
           console.warn('Failed to start streaming, will poll instead:', streamError);
         }
@@ -160,8 +160,8 @@ export function SessionOutputViewer({ session, onClose, className }: SessionOutp
       unlistenRefs.current.forEach(unlisten => unlisten());
       unlistenRefs.current = [];
 
-      // Set up live event listeners with run ID isolation
-      const outputUnlisten = await listen<string>(`agent-output:${session.id}`, (event) => {
+      // Set up live event listeners with session ID isolation
+      const outputUnlisten = await listen<string>(`agent-output-${session.session_id}`, (event) => {
         try {
           // Store raw JSONL
           setRawJsonlOutput(prev => [...prev, event.payload]);
@@ -174,12 +174,12 @@ export function SessionOutputViewer({ session, onClose, className }: SessionOutp
         }
       });
 
-      const errorUnlisten = await listen<string>(`agent-error:${session.id}`, (event) => {
+      const errorUnlisten = await listen<string>(`agent-error-${session.session_id}`, (event) => {
         console.error("Agent error:", event.payload);
         setToast({ message: event.payload, type: 'error' });
       });
 
-      const completeUnlisten = await listen<boolean>(`agent-complete:${session.id}`, () => {
+      const completeUnlisten = await listen<boolean>(`agent-complete-${session.session_id}`, () => {
         setToast({ message: 'Agent execution completed', type: 'success' });
         // Don't set status here as the parent component should handle it
       });

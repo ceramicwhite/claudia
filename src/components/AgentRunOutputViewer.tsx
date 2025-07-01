@@ -132,7 +132,7 @@ export function AgentRunOutputViewer({
       }
 
       setLoading(true);
-      const rawOutput = await api.getSessionOutput(run.id);
+      const rawOutput = await api.getSessionOutput(run.session_id);
       
       // Parse JSONL output into messages
       const jsonlLines = rawOutput.split('\n').filter(line => line.trim());
@@ -162,7 +162,7 @@ export function AgentRunOutputViewer({
         setupLiveEventListeners();
         
         try {
-          await api.streamSessionOutput(run.id);
+          await api.streamSessionOutput(run.session_id);
         } catch (streamError) {
           console.warn('Failed to start streaming, will poll instead:', streamError);
         }
@@ -183,8 +183,8 @@ export function AgentRunOutputViewer({
       unlistenRefs.current.forEach(unlisten => unlisten());
       unlistenRefs.current = [];
 
-      // Set up live event listeners with run ID isolation
-      const outputUnlisten = await listen<string>(`agent-output:${run.id}`, (event) => {
+      // Set up live event listeners with session ID isolation
+      const outputUnlisten = await listen<string>(`agent-output-${run.session_id}`, (event) => {
         try {
           // Store raw JSONL
           setRawJsonlOutput(prev => [...prev, event.payload]);
@@ -197,12 +197,12 @@ export function AgentRunOutputViewer({
         }
       });
 
-      const errorUnlisten = await listen<string>(`agent-error:${run.id}`, (event) => {
+      const errorUnlisten = await listen<string>(`agent-error-${run.session_id}`, (event) => {
         console.error("Agent error:", event.payload);
         setToast({ message: event.payload, type: 'error' });
       });
 
-      const completeUnlisten = await listen<boolean>(`agent-complete:${run.id}`, () => {
+      const completeUnlisten = await listen<boolean>(`agent-complete-${run.session_id}`, () => {
         setToast({ message: 'Agent execution completed', type: 'success' });
       });
 

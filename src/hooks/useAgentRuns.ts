@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { api, type AgentRun } from '@/lib/api';
+import { api, type AgentRun, type AgentRunWithMetrics } from '@/lib/api';
 
 interface UseAgentRunsOptions {
   refreshInterval?: number;
@@ -65,9 +65,9 @@ export function useAgentRun(runId?: number) {
  * Custom hook for fetching running sessions with polling
  */
 export function useRunningSessions(pollingInterval = 5000) {
-  const { data, error, isLoading, mutate } = useSWR<AgentRun[]>(
+  const { data, error, isLoading, mutate } = useSWR<AgentRunWithMetrics[]>(
     'running-sessions',
-    () => api.listRunningAgentSessions(),
+    () => api.listRunningAgentSessionsWithMetrics(),
     {
       refreshInterval: pollingInterval,
       revalidateOnFocus: true,

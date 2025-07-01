@@ -45,6 +45,7 @@ pub trait AgentRepository {
     fn get_jsonl_output(&self, run_id: i64) -> Result<String, AgentError>;
     fn get_last_line_number(&self, run_id: i64) -> Result<i64, AgentError>;
 
+    #[allow(dead_code)]
     fn store_sandbox_violation(&self, violation: SandboxViolation) -> Result<(), AgentError>;
 
     fn get_setting(&self, key: &str) -> Result<Option<String>, AgentError>;

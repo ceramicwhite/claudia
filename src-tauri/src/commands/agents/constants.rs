@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Pricing constants (per million tokens)
 pub const OPUS_3_INPUT_PRICE: f64 = 15.0;
 pub const OPUS_3_OUTPUT_PRICE: f64 = 75.0;

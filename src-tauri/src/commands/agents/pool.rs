@@ -4,7 +4,6 @@ use std::path::Path;
 use super::error::AgentError;
 
 pub type SqlitePool = Pool<SqliteConnectionManager>;
-pub type SqlitePooledConnection = PooledConnection<SqliteConnectionManager>;
 
 /// Create a new SQLite connection pool
 pub fn create_pool<P: AsRef<Path>>(path: P) -> Result<SqlitePool, AgentError> {

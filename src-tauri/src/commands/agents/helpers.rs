@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::constants::*;
 use super::error::AgentError;
 use super::types::*;
