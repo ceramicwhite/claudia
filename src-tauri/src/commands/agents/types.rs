@@ -261,7 +261,7 @@ pub struct AgentRun {
     pub model: String,
     pub project_path: String,
     pub session_id: String, // UUID session ID from Claude Code
-    pub status: String,     // TODO: Convert to RunStatus enum in phase 2
+    pub status: String,     // Stored as String for database compatibility, use RunStatus::from_str() for conversion
     pub pid: Option<u32>,
     pub process_started_at: Option<String>,
     pub scheduled_start_time: Option<String>, // ISO 8601 datetime string for scheduled runs
@@ -271,6 +271,23 @@ pub struct AgentRun {
     pub auto_resume_enabled: bool,
     pub resume_count: i64,
     pub parent_run_id: Option<i64>, // ID of the original run if this is a resumed run
+}
+
+impl AgentRun {
+    /// Get the status as a RunStatus enum
+    pub fn status(&self) -> RunStatus {
+        RunStatus::from_str(&self.status)
+    }
+    
+    /// Check if the run is in a terminal state
+    pub fn is_terminal(&self) -> bool {
+        self.status().is_terminal()
+    }
+    
+    /// Check if the run is currently active
+    pub fn is_active(&self) -> bool {
+        self.status().is_active()
+    }
 }
 
 /// GitHub agent file information
@@ -288,13 +305,6 @@ pub struct GitHubAgentFile {
     pub file_type: String,
 }
 
-/// Claude installation info
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ClaudeInstallation {
-    pub path: String,
-    pub version: Option<String>,
-    pub source: String,
-}
 
 /// Represents runtime metrics calculated from JSONL
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -536,6 +546,7 @@ impl AgentCreate {
 mod tests {
     use super::*;
     use serde_json;
+    use crate::claude_binary::ClaudeInstallation;
 
     // ===== Helper Functions =====
     

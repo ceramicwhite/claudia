@@ -5,8 +5,8 @@ use super::pool::SqlitePool;
 use super::repository::*;
 use crate::process_registry::ProcessRegistry;
 use crate::sandbox::profile::ProfileBuilder;
-use log::{debug, error, info, warn};
-use rusqlite::{params, Connection};
+use crate::claude_binary::find_claude_binary;
+use log::{error, info, warn};
 use serde_json::Value as JsonValue;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -35,13 +35,14 @@ pub async fn execute_agent(
 
     // Use provided values or defaults
     let task = task.unwrap_or_else(|| agent.default_task.clone().unwrap_or_default());
-    let project_path = project_path.unwrap_or_else(|| {
-        app.path()
+    let project_path = match project_path {
+        Some(path) => path,
+        None => app.path()
             .home_dir()
-            .unwrap()
+            .map_err(|e| AgentError::Other(format!("Failed to get home directory: {}", e)))?
             .to_string_lossy()
             .to_string()
-    });
+    };
 
     // Create or use existing run
     let run = if let Some(run_id) = run_id {
@@ -177,7 +178,7 @@ pub async fn execute_agent(
         .stdin(Stdio::null());
 
     // Spawn the process
-    let mut child = cmd.spawn().map_err(|e| {
+    let child = cmd.spawn().map_err(|e| {
         error!("Failed to spawn claude process: {}", e);
         AgentError::Process(format!("Failed to spawn claude process: {}", e))
     })?;
@@ -206,7 +207,7 @@ pub async fn execute_agent(
     let registry_clone = Arc::clone(&registry);
 
     // Get data directory for database access
-    let data_dir = app
+    let _data_dir = app
         .path()
         .app_data_dir()
         .map_err(|e| AgentError::Other(e.to_string()))?;
@@ -245,8 +246,14 @@ async fn handle_agent_output(
     let mut reset_time = None;
 
     // Get child process from registry
-    let mut child = {
-        let mut reg = registry.lock().unwrap();
+    let child = {
+        let mut reg = match registry.lock() {
+            Ok(r) => r,
+            Err(e) => {
+                error!("Failed to lock registry: {}", e);
+                return;
+            }
+        };
         reg.take_child(&session_id)
     };
 
@@ -330,8 +337,14 @@ async fn handle_agent_output(
 
         // Update process registry
         {
-            let mut reg = registry.lock().unwrap();
-            reg.unregister_process(&session_id);
+            match registry.lock() {
+                Ok(mut reg) => {
+                    reg.unregister_process(&session_id);
+                }
+                Err(e) => {
+                    error!("Failed to lock registry for unregistration: {}", e);
+                }
+            }
         }
 
         // Determine final status
@@ -405,7 +418,7 @@ pub async fn stream_session_output(
 async fn persist_agent_output_line(
     app_data_dir: &std::path::Path,
     run_id: i64,
-    line_number: i64,
+    _line_number: i64,
     content: &str,
 ) -> Result<(), AgentError> {
     let output_dir = app_data_dir.join("agent_outputs");
@@ -427,9 +440,4 @@ async fn persist_agent_output_line(
     file.write_all(b"\n").await?;
     
     Ok(())
-}
-
-/// Finds the full path to the claude binary
-fn find_claude_binary(app_handle: &AppHandle) -> Result<String, String> {
-    crate::claude_binary::find_claude_binary(app_handle)
 }

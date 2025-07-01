@@ -1,6 +1,5 @@
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::Connection;
 use std::path::Path;
 use super::error::AgentError;
 

@@ -47,6 +47,12 @@ pub enum AgentError {
 
     #[error("Other error: {0}")]
     Other(String),
+    
+    #[error("Not found: {0}")]
+    NotFound(String),
+    
+    #[error("Validation error: {0}")]
+    Validation(String),
 }
 
 // Implement conversion to String for Tauri commands

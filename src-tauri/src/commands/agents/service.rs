@@ -3,30 +3,20 @@ use crate::commands::agents::{
     AgentRunWithMetrics,
 };
 use crate::process_registry::ProcessRegistry;
-use anyhow::Result;
 use chrono;
-use log::{debug, error, info, warn};
-use rusqlite::Connection;
-use std::path::Path;
+use log::{info, warn};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::AppHandle;
 
 /// Agent service for business logic
 pub struct AgentService {
     app_handle: AppHandle,
-    app_data_dir: std::path::PathBuf,
 }
 
 impl AgentService {
     pub fn new(app_handle: AppHandle) -> Self {
-        let app_data_dir = app_handle
-            .path()
-            .app_data_dir()
-            .expect("Failed to get app data dir");
-
         Self {
             app_handle,
-            app_data_dir,
         }
     }
 
@@ -500,7 +490,7 @@ impl AgentService {
         // Execute the resumed run
         if let Some(resumed_run_id) = resumed_run.id {
             // Use the execute module to run the agent
-            let execute_result = super::execute::execute_agent(
+            let _execute_result = super::execute::execute_agent(
                 self.app_handle.clone(),
                 pool.clone(),
                 registry,

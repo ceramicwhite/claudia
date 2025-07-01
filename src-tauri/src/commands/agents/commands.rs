@@ -1,7 +1,8 @@
 use crate::commands::agents::{error::AgentError, service::*, types::*, AgentDb, AgentRunWithMetrics};
 use crate::process_registry::ProcessRegistry;
+use crate::claude_binary::ClaudeInstallation;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 /// Tauri command handlers - thin wrappers around service methods
 
@@ -569,15 +570,19 @@ pub async fn stream_session_output(
 // List available Claude installations
 #[tauri::command]
 pub async fn list_claude_installations(
-    app: AppHandle,
+    _app: AppHandle,
 ) -> Result<Vec<ClaudeInstallation>, String> {
-    // For now, return a simple implementation
-    // This would typically scan common installation locations
-    let installations = vec![];
+    let installations = crate::claude_binary::discover_claude_installations();
+
+    if installations.is_empty() {
+        return Err("No Claude Code installations found on the system".to_string());
+    }
+
     Ok(installations)
 }
 
 // Read agent output file
+#[allow(dead_code)]
 pub fn read_agent_output_file(app_data_dir: &std::path::Path, run_id: i64) -> Result<String, String> {
     use std::fs;
     
@@ -593,4 +598,5 @@ pub fn read_agent_output_file(app_data_dir: &std::path::Path, run_id: i64) -> Re
 }
 
 #[cfg(test)]
+#[path = "commands_focused_tests.rs"]
 mod commands_focused_tests;

@@ -1,10 +1,9 @@
 use crate::commands::agents::{
-    constants, error::AgentError, pool::SqlitePool, types::*, AgentRunMetrics, AgentRunWithMetrics,
+    constants, error::AgentError, pool::SqlitePool, types::*, AgentRunMetrics,
 };
 use anyhow::Result;
 use chrono;
-use log::{debug, error, info};
-use rusqlite::{params, Connection, Transaction};
+use rusqlite::params;
 use serde_json::Value as JsonValue;
 
 /// Repository trait for database operations
@@ -628,11 +627,15 @@ impl AgentRepository for SqliteAgentRepository {
                 if let Some(timestamp_str) = json.get("timestamp").and_then(|t| t.as_str()) {
                     if let Ok(timestamp) = chrono::DateTime::parse_from_rfc3339(timestamp_str) {
                         let timestamp = timestamp.with_timezone(&chrono::Utc);
-                        if start_time.is_none() || timestamp < start_time.unwrap() {
-                            start_time = Some(timestamp);
+                        match start_time {
+                            None => start_time = Some(timestamp),
+                            Some(existing) if timestamp < existing => start_time = Some(timestamp),
+                            _ => {}
                         }
-                        if end_time.is_none() || timestamp > end_time.unwrap() {
-                            end_time = Some(timestamp);
+                        match end_time {
+                            None => end_time = Some(timestamp),
+                            Some(existing) if timestamp > existing => end_time = Some(timestamp),
+                            _ => {}
                         }
                     }
                 }
