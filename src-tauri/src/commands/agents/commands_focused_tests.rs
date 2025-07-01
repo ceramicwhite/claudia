@@ -605,7 +605,7 @@ mod tests {
 
     #[test]
     fn test_output_file_path_construction() {
-        use std::path::Path;
+        
         use tempfile::TempDir;
         
         let temp_dir = TempDir::new().unwrap();

@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod agent_metrics_tests {
     use chrono::{DateTime, Utc};
-    use serde_json::json;
+    
 
     // Mock the AgentRunMetrics struct for testing
     #[derive(Debug, PartialEq)]
@@ -223,7 +223,7 @@ not valid json
 
 // Helper function to parse usage limit errors
 pub fn parse_usage_limit_error(output: &str) -> Option<String> {
-    use chrono::{DateTime, Utc, Duration};
+    
 
     // Check if the output contains the usage limit error pattern
     if output.contains("Claude AI usage limit reached|") {
@@ -240,7 +240,7 @@ pub fn parse_usage_limit_error(output: &str) -> Option<String> {
 
 #[cfg(test)]
 mod usage_limit_tests {
-    use chrono::{DateTime, Utc, Duration};
+    
 
 
     #[test]
@@ -446,7 +446,7 @@ mod migration_tests {
 mod command_handler_tests {
     use rusqlite::{Connection, params};
     use tempfile::TempDir;
-    use serde_json::json;
+    
 
     fn create_test_db_with_schema() -> (TempDir, Connection) {
         let temp_dir = TempDir::new().unwrap();

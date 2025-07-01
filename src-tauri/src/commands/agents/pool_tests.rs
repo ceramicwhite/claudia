@@ -5,7 +5,7 @@ mod tests {
     use r2d2::{Pool, CustomizeConnection};
     use r2d2_sqlite::SqliteConnectionManager;
     use rusqlite::Connection;
-    use std::sync::{Arc, Mutex, atomic::{AtomicUsize, Ordering}};
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
     use std::thread;
     use std::time::{Duration, Instant};
     use tempfile::TempDir;
