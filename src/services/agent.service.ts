@@ -55,18 +55,18 @@ export class AgentService extends BaseService {
     enable_file_write?: boolean,
     enable_network?: boolean
   ): Promise<Agent> {
-    return this.invoke<{ name: string; icon: string; systemPrompt: string; defaultTask?: string; model?: string; sandboxEnabled?: boolean; enableFileRead?: boolean; enableFileWrite?: boolean; enableNetwork?: boolean }, Agent>(
+    return this.invoke<{ name: string; icon: string; system_prompt: string; default_task?: string; model?: string; sandbox_enabled?: boolean; enable_file_read?: boolean; enable_file_write?: boolean; enable_network?: boolean }, Agent>(
       TAURI_COMMANDS.CREATE_AGENT,
       { 
         name, 
         icon, 
-        systemPrompt: system_prompt,
-        defaultTask: default_task,
+        system_prompt,
+        default_task,
         model,
-        sandboxEnabled: sandbox_enabled,
-        enableFileRead: enable_file_read,
-        enableFileWrite: enable_file_write,
-        enableNetwork: enable_network
+        sandbox_enabled,
+        enable_file_read,
+        enable_file_write,
+        enable_network
       },
       ERROR_MESSAGES.FAILED_TO_CREATE_AGENT
     );
@@ -98,19 +98,19 @@ export class AgentService extends BaseService {
     enable_file_write?: boolean,
     enable_network?: boolean
   ): Promise<Agent> {
-    return this.invoke<{ id: number; name: string; icon: string; systemPrompt: string; defaultTask?: string; model?: string; sandboxEnabled?: boolean; enableFileRead?: boolean; enableFileWrite?: boolean; enableNetwork?: boolean }, Agent>(
+    return this.invoke<{ id: number; name: string; icon: string; system_prompt: string; default_task?: string; model?: string; sandbox_enabled?: boolean; enable_file_read?: boolean; enable_file_write?: boolean; enable_network?: boolean }, Agent>(
       TAURI_COMMANDS.UPDATE_AGENT,
       { 
         id, 
         name, 
         icon, 
-        systemPrompt: system_prompt,
-        defaultTask: default_task,
+        system_prompt,
+        default_task,
         model,
-        sandboxEnabled: sandbox_enabled,
-        enableFileRead: enable_file_read,
-        enableFileWrite: enable_file_write,
-        enableNetwork: enable_network
+        sandbox_enabled,
+        enable_file_read,
+        enable_file_write,
+        enable_network
       },
       ERROR_MESSAGES.FAILED_TO_UPDATE_AGENT
     );
@@ -161,9 +161,9 @@ export class AgentService extends BaseService {
    * @returns Promise resolving to the imported agent
    */
   async importAgent(jsonData: string): Promise<Agent> {
-    return this.invoke<{ jsonData: string }, Agent>(
+    return this.invoke<{ json_data: string }, Agent>(
       TAURI_COMMANDS.IMPORT_AGENT,
-      { jsonData },
+      { json_data: jsonData },
       ERROR_MESSAGES.FAILED_TO_IMPORT_AGENT
     );
   }
@@ -174,9 +174,9 @@ export class AgentService extends BaseService {
    * @returns Promise resolving to the imported agent
    */
   async importAgentFromFile(filePath: string): Promise<Agent> {
-    return this.invoke<{ filePath: string }, Agent>(
+    return this.invoke<{ file_path: string }, Agent>(
       TAURI_COMMANDS.IMPORT_AGENT_FROM_FILE,
-      { filePath },
+      { file_path: filePath },
       ERROR_MESSAGES.FAILED_TO_IMPORT_AGENT
     );
   }
@@ -195,9 +195,9 @@ export class AgentService extends BaseService {
    * @returns Promise resolving to the agent export data
    */
   async fetchGitHubAgentContent(downloadUrl: string): Promise<AgentExport> {
-    return this.invoke<{ downloadUrl: string }, AgentExport>(
+    return this.invoke<{ download_url: string }, AgentExport>(
       TAURI_COMMANDS.FETCH_GITHUB_AGENT_CONTENT,
-      { downloadUrl },
+      { download_url: downloadUrl },
       ERROR_MESSAGES.FAILED_TO_FETCH_GITHUB_CONTENT
     );
   }
@@ -208,9 +208,9 @@ export class AgentService extends BaseService {
    * @returns Promise resolving to the imported agent
    */
   async importAgentFromGitHub(downloadUrl: string): Promise<Agent> {
-    return this.invoke<{ downloadUrl: string }, Agent>(
+    return this.invoke<{ download_url: string }, Agent>(
       TAURI_COMMANDS.IMPORT_AGENT_FROM_GITHUB,
-      { downloadUrl },
+      { download_url: downloadUrl },
       ERROR_MESSAGES.FAILED_TO_IMPORT_FROM_GITHUB
     );
   }
@@ -231,9 +231,9 @@ export class AgentService extends BaseService {
     model?: string, 
     autoResumeEnabled?: boolean
   ): Promise<number> {
-    return this.invoke<{ agentId: number; projectPath: string; task: string; model?: string; autoResumeEnabled?: boolean }, number>(
+    return this.invoke<{ agent_id: number; project_path: string; task: string; model?: string; auto_resume_enabled?: boolean }, number>(
       TAURI_COMMANDS.EXECUTE_AGENT,
-      { agentId, projectPath, task, model, autoResumeEnabled },
+      { agent_id: agentId, project_path: projectPath, task, model, auto_resume_enabled: autoResumeEnabled },
       ERROR_MESSAGES.FAILED_TO_EXECUTE_AGENT
     );
   }
@@ -254,9 +254,9 @@ export class AgentService extends BaseService {
     model: string,
     scheduledStartTime: string
   ): Promise<number> {
-    return this.invoke<{ agentId: number; projectPath: string; task: string; model: string; scheduledStartTime: string }, number>(
+    return this.invoke<{ agent_id: number; project_path: string; task: string; model: string; scheduled_start_time: string }, number>(
       TAURI_COMMANDS.CREATE_SCHEDULED_AGENT_RUN,
-      { agentId, projectPath, task, model, scheduledStartTime },
+      { agent_id: agentId, project_path: projectPath, task, model, scheduled_start_time: scheduledStartTime },
       ERROR_MESSAGES.FAILED_TO_CREATE_SCHEDULED_RUN
     );
   }
@@ -275,9 +275,9 @@ export class AgentService extends BaseService {
    * @returns Promise resolving when schedule is cancelled
    */
   async cancelScheduledAgentRun(runId: number): Promise<void> {
-    return this.invoke<{ runId: number }, void>(
+    return this.invoke<{ run_id: number }, void>(
       TAURI_COMMANDS.CANCEL_SCHEDULED_AGENT_RUN,
-      { runId },
+      { run_id: runId },
       ERROR_MESSAGES.FAILED_TO_CANCEL_SCHEDULED_RUN
     );
   }
@@ -290,9 +290,9 @@ export class AgentService extends BaseService {
   async listAgentRuns(agentId?: number): Promise<AgentRunWithMetrics[]> {
     // Use safeInvoke to prevent UI crashes
     return this.safeInvoke(
-      this.invoke<{ agentId?: number }, AgentRunWithMetrics[]>(
+      this.invoke<{ agent_id?: number }, AgentRunWithMetrics[]>(
         TAURI_COMMANDS.LIST_AGENT_RUNS,
-        { agentId }
+        agentId ? { agent_id: agentId } : {}
       ),
       []
     );
@@ -338,9 +338,9 @@ export class AgentService extends BaseService {
    * @returns Promise resolving to the new run ID
    */
   async resumeAgent(runId: number): Promise<number> {
-    return this.invoke<{ runId: number }, number>(
+    return this.invoke<{ run_id: number }, number>(
       TAURI_COMMANDS.RESUME_AGENT,
-      { runId },
+      { run_id: runId },
       ERROR_MESSAGES.FAILED_TO_RESUME_AGENT
     );
   }
@@ -359,9 +359,9 @@ export class AgentService extends BaseService {
    * @returns Promise resolving to whether the session was successfully killed
    */
   async killAgentSession(runId: number): Promise<boolean> {
-    return this.invoke<{ runId: number }, boolean>(
+    return this.invoke<{ run_id: number }, boolean>(
       TAURI_COMMANDS.KILL_AGENT_SESSION,
-      { runId },
+      { run_id: runId },
       ERROR_MESSAGES.FAILED_TO_KILL_SESSION
     );
   }
@@ -372,9 +372,9 @@ export class AgentService extends BaseService {
    * @returns Promise resolving to the session status or null if not found
    */
   async getSessionStatus(runId: number): Promise<string | null> {
-    return this.invoke<{ runId: number }, string | null>(
+    return this.invoke<{ run_id: number }, string | null>(
       TAURI_COMMANDS.GET_SESSION_STATUS,
-      { runId },
+      { run_id: runId },
       ERROR_MESSAGES.FAILED_TO_GET_SESSION_STATUS
     );
   }
@@ -393,9 +393,9 @@ export class AgentService extends BaseService {
    * @returns Promise resolving to the current session output (JSONL format)
    */
   async getSessionOutput(sessionId: string): Promise<string> {
-    return this.invoke<{ sessionId: string }, string>(
+    return this.invoke<{ session_id: string }, string>(
       TAURI_COMMANDS.GET_SESSION_OUTPUT,
-      { sessionId },
+      { session_id: sessionId },
       ERROR_MESSAGES.FAILED_TO_GET_SESSION_OUTPUT
     );
   }
@@ -406,9 +406,9 @@ export class AgentService extends BaseService {
    * @returns Promise resolving to the current live output
    */
   async getLiveSessionOutput(runId: number): Promise<string> {
-    return this.invoke<{ runId: number }, string>(
+    return this.invoke<{ run_id: number }, string>(
       TAURI_COMMANDS.GET_LIVE_SESSION_OUTPUT,
-      { runId },
+      { run_id: runId },
       ERROR_MESSAGES.FAILED_TO_GET_LIVE_OUTPUT
     );
   }
@@ -419,9 +419,9 @@ export class AgentService extends BaseService {
    * @returns Promise that resolves when streaming starts
    */
   async streamSessionOutput(sessionId: string): Promise<void> {
-    return this.invoke<{ sessionId: string }, void>(
+    return this.invoke<{ session_id: string }, void>(
       TAURI_COMMANDS.STREAM_SESSION_OUTPUT,
-      { sessionId },
+      { session_id: sessionId },
       ERROR_MESSAGES.FAILED_TO_START_STREAMING
     );
   }

@@ -114,7 +114,7 @@ export function OutputCacheProvider({ children }: OutputCacheProviderProps) {
 
   const updateSessionCache = useCallback(async (sessionId: number, status: string) => {
     try {
-      const rawOutput = await api.getSessionOutput(sessionId);
+      const rawOutput = await api.getSessionOutput(sessionId.toString());
       const messages = parseOutput(rawOutput);
       
       setCachedOutput(sessionId, {

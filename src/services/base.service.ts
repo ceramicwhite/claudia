@@ -2,7 +2,7 @@
  * Base service class with type-safe Tauri command invocation and error handling
  */
 
-import { invoke } from '@tauri-apps/api';
+import { invoke } from '@tauri-apps/api/core';
 import { z } from 'zod';
 import { AppError, TauriError, ValidationError, ErrorHandler } from '@/lib/errors';
 
