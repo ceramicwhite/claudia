@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod edge_cases {
-    use chrono::{DateTime, Utc, Duration, NaiveDateTime};
+    use chrono::{DateTime, Utc};
     use rusqlite::{Connection, params, Error as SqliteError};
     use tempfile::TempDir;
 
