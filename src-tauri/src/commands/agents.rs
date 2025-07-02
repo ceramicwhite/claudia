@@ -1944,7 +1944,7 @@ pub async fn get_session_output(
     run_id: i64,
 ) -> Result<String, String> {
     // Get the session information
-    let run = get_agent_run(db, run_id).await?;
+    let run = get_agent_run(db.clone(), run_id).await?;
 
     // If no session ID yet, try to get live output from registry
     if run.session_id.is_empty() {
@@ -1959,9 +1959,54 @@ pub async fn get_session_output(
     match read_session_jsonl(&run.session_id, &run.project_path).await {
         Ok(content) => Ok(content),
         Err(_) => {
-            // Fallback to live output if JSONL file doesn't exist yet
+            // For resumed runs, we should also check if there's output from parent runs
+            // This ensures we don't lose output when a session is resumed
+            let mut combined_output = String::new();
+            
+            // Collect all parent run IDs to avoid recursion
+            let mut current_parent_id = run.parent_run_id;
+            let mut parent_outputs = Vec::new();
+            
+            // Walk up the chain of parent runs
+            while let Some(parent_id) = current_parent_id {
+                let parent_run = match get_agent_run(db.clone(), parent_id).await {
+                    Ok(r) => r,
+                    Err(_) => break,
+                };
+                
+                // Try to get output for this parent
+                if !parent_run.session_id.is_empty() {
+                    // Try to read JSONL for parent
+                    if let Ok(parent_jsonl) = read_session_jsonl(&parent_run.session_id, &parent_run.project_path).await {
+                        parent_outputs.push(parent_jsonl);
+                        break; // Found JSONL, no need to go further
+                    }
+                }
+                
+                // Get live output for parent
+                if let Ok(parent_live) = registry.0.get_live_output(parent_id) {
+                    if !parent_live.is_empty() {
+                        parent_outputs.push(parent_live);
+                    }
+                }
+                
+                // Move to next parent
+                current_parent_id = parent_run.parent_run_id;
+            }
+            
+            // Add parent outputs in reverse order (oldest first)
+            for output in parent_outputs.into_iter().rev() {
+                combined_output.push_str(&output);
+                if !combined_output.is_empty() && !combined_output.ends_with('\n') {
+                    combined_output.push('\n');
+                }
+            }
+            
+            // Add current run's live output
             let live_output = registry.0.get_live_output(run_id)?;
-            Ok(live_output)
+            combined_output.push_str(&live_output);
+            
+            Ok(combined_output)
         }
     }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Clock, RefreshCw, ArrowLeft, Pause, ChevronDown, XCircle, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { SessionOutputViewer } from './SessionOutputViewer';
 import { SessionCard } from './SessionCard';
 import { api } from '@/lib/api';
 import type { AgentRunWithMetrics } from '@/lib/api';
+import { useOutputCache } from '@/lib/outputCache';
 
 interface RunningSessionsViewProps {
   className?: string;
@@ -17,8 +18,8 @@ interface RunningSessionsViewProps {
 }
 
 export function RunningSessionsView({ className, showBackButton = false, onBack, onEditSession }: RunningSessionsViewProps) {
-  const [allSessions, setAllSessions] = useState<AgentRunWithMetrics[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { allSessions } = useOutputCache();
+  const [loading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedSession, setSelectedSession] = useState<AgentRunWithMetrics | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -45,25 +46,14 @@ export function RunningSessionsView({ className, showBackButton = false, onBack,
     setSectionsExpanded(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
-  const loadRunningSessions = async () => {
-    try {
-      const sessions = await api.listRunningAgentSessionsWithMetrics();
-      setAllSessions(sessions);
-    } catch (error) {
-      console.error('Failed to load running sessions:', error);
-      setToast({ message: 'Failed to load running sessions', type: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Remove the loadRunningSessions function as we're using cached data now
 
   const refreshSessions = async () => {
     setRefreshing(true);
     try {
       // First cleanup finished processes
       await api.cleanupFinishedProcesses();
-      // Then reload the list
-      await loadRunningSessions();
+      // The sessions will be refreshed automatically by the OutputCacheProvider
       setToast({ message: 'Running sessions list has been updated', type: 'success' });
     } catch (error) {
       console.error('Failed to refresh sessions:', error);
@@ -78,8 +68,7 @@ export function RunningSessionsView({ className, showBackButton = false, onBack,
       const success = await api.killAgentSession(runId);
       if (success) {
         setToast({ message: `${agentName} session has been stopped`, type: 'success' });
-        // Refresh the list after killing
-        await loadRunningSessions();
+        // The sessions will be refreshed automatically by the OutputCacheProvider
       } else {
         setToast({ message: 'Session may have already finished', type: 'error' });
       }
@@ -99,7 +88,7 @@ export function RunningSessionsView({ className, showBackButton = false, onBack,
       await api.resumeAgent(session.id);
       
       setToast({ message: `${session.agent_name} has been resumed`, type: 'success' });
-      await loadRunningSessions();
+      // The sessions will be refreshed automatically by the OutputCacheProvider
     } catch (error) {
       console.error('Failed to resume session:', error);
       setToast({ message: 'Failed to resume session', type: 'error' });
@@ -118,7 +107,7 @@ export function RunningSessionsView({ className, showBackButton = false, onBack,
       );
       
       setToast({ message: `${session.agent_name} has been retried`, type: 'success' });
-      await loadRunningSessions();
+      // The sessions will be refreshed automatically by the OutputCacheProvider
     } catch (error) {
       console.error('Failed to retry session:', error);
       setToast({ message: 'Failed to retry session', type: 'error' });
@@ -131,18 +120,7 @@ export function RunningSessionsView({ className, showBackButton = false, onBack,
     }
   };
 
-  useEffect(() => {
-    loadRunningSessions();
-    
-    // Set up auto-refresh every 5 seconds
-    const interval = setInterval(() => {
-      if (!refreshing) {
-        loadRunningSessions();
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [refreshing]);
+  // No need for useEffect or polling - data is provided by OutputCacheProvider
 
   if (loading) {
     return (

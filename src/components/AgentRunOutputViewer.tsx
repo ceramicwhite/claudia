@@ -77,6 +77,7 @@ export function AgentRunOutputViewer({
   const fullscreenMessagesEndRef = useRef<HTMLDivElement>(null);
   const unlistenRefs = useRef<UnlistenFn[]>([]);
   const { getCachedOutput, setCachedOutput } = useOutputCache();
+  const loadedMessageCount = useRef<number>(0);
 
   // Auto-scroll logic
   const isAtBottom = () => {
@@ -149,6 +150,9 @@ export function AgentRunOutputViewer({
       }
       setMessages(parsedMessages);
       
+      // Track how many messages were loaded initially
+      loadedMessageCount.current = parsedMessages.length;
+      
       // Update cache
       setCachedOutput(run.id, {
         output: rawOutput,
@@ -183,9 +187,18 @@ export function AgentRunOutputViewer({
       unlistenRefs.current.forEach(unlisten => unlisten());
       unlistenRefs.current = [];
 
+      // Keep track of how many messages we've seen to avoid duplicates
+      let messagesSeen = 0;
+
       // Set up live event listeners with run ID isolation
       const outputUnlisten = await listen<string>(`agent-output:${run.id}`, (event) => {
         try {
+          // Skip messages we've already loaded
+          messagesSeen++;
+          if (messagesSeen <= loadedMessageCount.current) {
+            return;
+          }
+          
           // Store raw JSONL
           setRawJsonlOutput(prev => [...prev, event.payload]);
           
@@ -304,6 +317,7 @@ export function AgentRunOutputViewer({
       const cachedJsonlLines = cached.output.split('\n').filter(line => line.trim());
       setRawJsonlOutput(cachedJsonlLines);
       setMessages(cached.messages);
+      loadedMessageCount.current = cached.messages.length;
     }
     
     // Then load fresh data
@@ -376,6 +390,26 @@ export function AgentRunOutputViewer({
     return tokens.toString();
   };
 
+  // Calculate token statistics from messages
+  const tokenStats = useMemo(() => {
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    messages.forEach(msg => {
+      if (msg.type === 'assistant' && msg.message?.usage) {
+        inputTokens += msg.message.usage.input_tokens || 0;
+        outputTokens += msg.message.usage.output_tokens || 0;
+      }
+    });
+
+    return {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      messageCount: displayableMessages.length
+    };
+  }, [messages, displayableMessages]);
+
   return (
     <>
       <motion.div
@@ -423,10 +457,13 @@ export function AgentRunOutputViewer({
                     {run.metrics?.duration_ms && (
                       <span>{formatDuration(run.metrics.duration_ms)}</span>
                     )}
-                    {run.metrics?.total_tokens && (
+                    {tokenStats.messageCount > 0 && (
+                      <span>{tokenStats.messageCount} messages</span>
+                    )}
+                    {tokenStats.totalTokens > 0 && (
                       <div className="flex items-center gap-1">
                         <Hash className="h-3 w-3" />
-                        <span>{formatTokens(run.metrics.total_tokens)}</span>
+                        <span>{formatTokens(tokenStats.inputTokens)} in / {formatTokens(tokenStats.outputTokens)} out</span>
                       </div>
                     )}
                     {run.metrics?.cost_usd && (
@@ -566,8 +603,39 @@ export function AgentRunOutputViewer({
             <div className="flex items-center gap-3">
               {renderIcon(run.agent_icon)}
               <div>
-                <h3 className="font-semibold text-lg">{run.agent_name}</h3>
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  {run.agent_name}
+                  {run.status === 'running' && (
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-xs text-green-600 font-medium">Running</span>
+                    </div>
+                  )}
+                </h3>
                 <p className="text-sm text-muted-foreground">{run.task}</p>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                  <Badge variant="outline" className="text-xs">
+                    {run.model === 'opus' ? 'Claude 4 Opus' : 'Claude 4 Sonnet'}
+                  </Badge>
+                  {tokenStats.messageCount > 0 && (
+                    <span>{tokenStats.messageCount} messages</span>
+                  )}
+                  {tokenStats.totalTokens > 0 && (
+                    <div className="flex items-center gap-1">
+                      <Hash className="h-3 w-3" />
+                      <span>{formatTokens(tokenStats.inputTokens)} in / {formatTokens(tokenStats.outputTokens)} out</span>
+                    </div>
+                  )}
+                  {run.metrics?.duration_ms && (
+                    <span>{formatDuration(run.metrics.duration_ms)}</span>
+                  )}
+                  {run.metrics?.cost_usd && (
+                    <div className="flex items-center gap-1">
+                      <DollarSign className="h-3 w-3" />
+                      <span>${run.metrics.cost_usd.toFixed(4)}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2">

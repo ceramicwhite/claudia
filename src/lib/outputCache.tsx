@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { api } from './api';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { api, type AgentRunWithMetrics } from './api';
 
 // Use the same message interface as AgentExecution for consistency
 export interface ClaudeStreamMessage {
@@ -34,6 +34,8 @@ interface OutputCacheContextType {
   isPolling: boolean;
   startBackgroundPolling: () => void;
   stopBackgroundPolling: () => void;
+  allSessions: AgentRunWithMetrics[];
+  lastSessionsUpdate: number;
 }
 
 const OutputCacheContext = createContext<OutputCacheContextType | null>(null);
@@ -54,6 +56,9 @@ export function OutputCacheProvider({ children }: OutputCacheProviderProps) {
   const [cache, setCache] = useState<Map<number, CachedSessionOutput>>(new Map());
   const [isPolling, setIsPolling] = useState(false);
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [allSessions, setAllSessions] = useState<AgentRunWithMetrics[]>([]);
+  const [lastSessionsUpdate, setLastSessionsUpdate] = useState<number>(0);
+  const isPollingStarted = useRef(false);
 
   const getCachedOutput = useCallback((sessionId: number): CachedSessionOutput | null => {
     return cache.get(sessionId) || null;
@@ -130,21 +135,29 @@ export function OutputCacheProvider({ children }: OutputCacheProviderProps) {
 
   const pollRunningSessions = useCallback(async () => {
     try {
-      const runningSessions = await api.listRunningAgentSessions();
+      // Fetch sessions with metrics in a single call
+      const sessionsWithMetrics = await api.listRunningAgentSessionsWithMetrics();
+      setAllSessions(sessionsWithMetrics);
+      setLastSessionsUpdate(Date.now());
       
-      // Update cache for all running sessions
+      // Only update output cache for running sessions
+      const runningSessions = sessionsWithMetrics.filter(s => s.status === 'running');
       for (const session of runningSessions) {
-        if (session.id && session.status === 'running') {
-          await updateSessionCache(session.id, session.status);
+        if (session.id) {
+          // Only fetch output if we don't have recent cache
+          const cached = cache.get(session.id);
+          if (!cached || Date.now() - cached.lastUpdated > 10000) { // 10 seconds
+            await updateSessionCache(session.id, session.status);
+          }
         }
       }
 
       // Clean up cache for sessions that are no longer running
-      const runningIds = new Set(runningSessions.map(s => s.id).filter(Boolean));
+      const activeIds = new Set(sessionsWithMetrics.map(s => s.id).filter(Boolean));
       setCache(prev => {
         const updated = new Map();
         for (const [sessionId, data] of prev) {
-          if (runningIds.has(sessionId) || data.status !== 'running') {
+          if (activeIds.has(sessionId)) {
             updated.set(sessionId, data);
           }
         }
@@ -153,14 +166,17 @@ export function OutputCacheProvider({ children }: OutputCacheProviderProps) {
     } catch (error) {
       console.warn('Failed to poll running sessions:', error);
     }
-  }, [updateSessionCache]);
+  }, [updateSessionCache, cache]);
 
   const startBackgroundPolling = useCallback(() => {
-    if (pollingInterval) return;
+    if (pollingInterval || isPollingStarted.current) return;
 
+    isPollingStarted.current = true;
     setIsPolling(true);
-    const interval = setInterval(pollRunningSessions, 3000); // Poll every 3 seconds
+    const interval = setInterval(pollRunningSessions, 5000); // Poll every 5 seconds
     setPollingInterval(interval);
+    // Poll immediately after setting up interval
+    pollRunningSessions();
   }, [pollingInterval, pollRunningSessions]);
 
   const stopBackgroundPolling = useCallback(() => {
@@ -169,6 +185,7 @@ export function OutputCacheProvider({ children }: OutputCacheProviderProps) {
       setPollingInterval(null);
     }
     setIsPolling(false);
+    isPollingStarted.current = false;
   }, [pollingInterval]);
 
   // Auto-start polling when provider mounts
@@ -185,6 +202,8 @@ export function OutputCacheProvider({ children }: OutputCacheProviderProps) {
     isPolling,
     startBackgroundPolling,
     stopBackgroundPolling,
+    allSessions,
+    lastSessionsUpdate,
   };
 
   return (
