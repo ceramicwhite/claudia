@@ -125,8 +125,9 @@ export function AgentRunOutputViewer({
           const cachedJsonlLines = cached.output.split('\n').filter(line => line.trim());
           setRawJsonlOutput(cachedJsonlLines);
           setMessages(cached.messages);
-          // If cache is recent (less than 5 seconds old) and session isn't running, use cache only
-          if (Date.now() - cached.lastUpdated < 5000 && run.status !== 'running') {
+          // For completed or paused runs, always fetch fresh data to ensure we have the complete output
+          // Only use cache for very recent data (less than 5 seconds) if session is still running
+          if (Date.now() - cached.lastUpdated < 5000 && run.status === 'running') {
             return;
           }
         }
@@ -134,6 +135,14 @@ export function AgentRunOutputViewer({
 
       setLoading(true);
       const rawOutput = await api.getSessionOutput(run.id);
+      
+      // Debug logging
+      console.log(`Loaded output for run ${run.id} (status: ${run.status}, parent: ${run.parent_run_id}):`, {
+        length: rawOutput.length,
+        lines: rawOutput.split('\n').length,
+        firstLine: rawOutput.split('\n')[0]?.substring(0, 100),
+        lastLine: rawOutput.split('\n').slice(-2)[0]?.substring(0, 100),
+      });
       
       // Parse JSONL output into messages
       const jsonlLines = rawOutput.split('\n').filter(line => line.trim());
@@ -149,6 +158,38 @@ export function AgentRunOutputViewer({
         }
       }
       setMessages(parsedMessages);
+      
+      // Look for usage limit in all message types
+      let usageLimitIndex = -1;
+      parsedMessages.forEach((msg, idx) => {
+        const msgStr = JSON.stringify(msg);
+        if (msgStr.includes('Claude AI usage limit reached')) {
+          usageLimitIndex = idx;
+        }
+      });
+      
+      console.log(`Usage limit found at index: ${usageLimitIndex}, Total messages: ${parsedMessages.length}`);
+      
+      // Log messages around the usage limit
+      if (usageLimitIndex >= 0) {
+        console.log('Message at usage limit:', parsedMessages[usageLimitIndex]);
+        console.log('Messages after usage limit:', parsedMessages.slice(usageLimitIndex + 1, usageLimitIndex + 6).map(msg => ({
+          type: msg.type,
+          summary: msg.summary,
+          result: msg.result,
+          text: msg.message?.content?.[0]?.text?.substring(0, 100)
+        })));
+      }
+      
+      // Log the last few messages
+      const lastMessages = parsedMessages.slice(-5);
+      console.log('Last 5 messages:', lastMessages.map(msg => ({
+        type: msg.type,
+        summary: msg.summary,
+        result: msg.result,
+        error: msg.error,
+        text: msg.message?.content?.[0]?.text?.substring(0, 100)
+      })));
       
       // Track how many messages were loaded initially
       loadedMessageCount.current = parsedMessages.length;
@@ -170,6 +211,10 @@ export function AgentRunOutputViewer({
         } catch (streamError) {
           console.warn('Failed to start streaming, will poll instead:', streamError);
         }
+      } else {
+        // For non-running sessions, clean up any existing listeners
+        unlistenRefs.current.forEach(unlisten => unlisten());
+        unlistenRefs.current = [];
       }
     } catch (error) {
       console.error('Failed to load agent output:', error);
@@ -324,8 +369,24 @@ export function AgentRunOutputViewer({
     loadOutput();
   }, [run.id]);
 
+  // Reload output when run status changes (e.g., from running to completed)
+  useEffect(() => {
+    if (!run.id) return;
+    
+    // Skip cache when status changes to ensure we get the latest output
+    loadOutput(true);
+  }, [run.status]);
+
   const displayableMessages = useMemo(() => {
-    return messages.filter((message) => {
+    // Temporarily disable filtering to see all messages
+    const DISABLE_FILTERING = true;
+    
+    if (DISABLE_FILTERING) {
+      console.log(`Displayable messages: ${messages.length} out of ${messages.length} total messages (filtering disabled)`);
+      return messages;
+    }
+    
+    const filtered = messages.filter((message) => {
       if (message.isMeta && !message.leafUuid && !message.summary) return false;
 
       if (message.type === "user" && message.message) {
@@ -366,6 +427,9 @@ export function AgentRunOutputViewer({
       }
       return true;
     });
+    
+    console.log(`Displayable messages: ${filtered.length} out of ${messages.length} total messages`);
+    return filtered;
   }, [messages]);
 
   const renderIcon = (iconName: string) => {

@@ -101,8 +101,9 @@ export function SessionOutputViewer({ session, onClose, className }: SessionOutp
           const cachedJsonlLines = cached.output.split('\n').filter(line => line.trim());
           setRawJsonlOutput(cachedJsonlLines);
           setMessages(cached.messages);
-          // If cache is recent (less than 5 seconds old) and session isn't running, use cache only
-          if (Date.now() - cached.lastUpdated < 5000 && session.status !== 'running') {
+          // For completed or paused runs, always fetch fresh data to ensure we have the complete output
+          // Only use cache for very recent data (less than 5 seconds) if session is still running
+          if (Date.now() - cached.lastUpdated < 5000 && session.status === 'running') {
             return;
           }
         }
@@ -110,6 +111,14 @@ export function SessionOutputViewer({ session, onClose, className }: SessionOutp
 
       setLoading(true);
       const rawOutput = await api.getSessionOutput(session.id);
+      
+      // Debug logging
+      console.log(`SessionOutputViewer: Loaded output for session ${session.id} (status: ${session.status}):`, {
+        length: rawOutput.length,
+        lines: rawOutput.split('\n').length,
+        firstLine: rawOutput.split('\n')[0]?.substring(0, 100),
+        lastLine: rawOutput.split('\n').slice(-2)[0]?.substring(0, 100),
+      });
       
       // Parse JSONL output into messages using AgentExecution style
       const jsonlLines = rawOutput.split('\n').filter(line => line.trim());
@@ -125,6 +134,37 @@ export function SessionOutputViewer({ session, onClose, className }: SessionOutp
         }
       }
       setMessages(parsedMessages);
+      
+      // Look for usage limit in all message types
+      let usageLimitIndex = -1;
+      parsedMessages.forEach((msg, idx) => {
+        const msgStr = JSON.stringify(msg);
+        if (msgStr.includes('Claude AI usage limit reached')) {
+          usageLimitIndex = idx;
+        }
+      });
+      
+      console.log(`SessionOutputViewer: Usage limit found at index: ${usageLimitIndex}, Total messages: ${parsedMessages.length}`);
+      
+      // Log messages around the usage limit
+      if (usageLimitIndex >= 0) {
+        console.log('Message at usage limit:', parsedMessages[usageLimitIndex]);
+        console.log('Messages after usage limit:', parsedMessages.slice(usageLimitIndex + 1, usageLimitIndex + 6).map(msg => ({
+          type: msg.type,
+          summary: msg.summary,
+          result: msg.result,
+          text: msg.message?.content?.[0]?.text?.substring(0, 100)
+        })));
+      }
+      
+      // Log the last few messages to debug
+      const lastMessages = parsedMessages.slice(-5);
+      console.log('Last 5 messages:', lastMessages.map(msg => ({
+        type: msg.type,
+        summary: msg.summary,
+        result: msg.result,
+        text: msg.message?.content?.[0]?.text?.substring(0, 100)
+      })));
       
       // Update cache
       setCachedOutput(session.id, {
@@ -143,6 +183,10 @@ export function SessionOutputViewer({ session, onClose, className }: SessionOutp
         } catch (streamError) {
           console.warn('Failed to start streaming, will poll instead:', streamError);
         }
+      } else {
+        // For non-running sessions, clean up any existing listeners
+        unlistenRefs.current.forEach(unlisten => unlisten());
+        unlistenRefs.current = [];
       }
     } catch (error) {
       console.error('Failed to load session output:', error);
@@ -288,8 +332,16 @@ export function SessionOutputViewer({ session, onClose, className }: SessionOutp
     loadOutput();
   }, [session.id]);
 
+  // Reload output when session status changes (e.g., from running to completed)
+  useEffect(() => {
+    if (!session.id) return;
+    
+    // Skip cache when status changes to ensure we get the latest output
+    loadOutput(true);
+  }, [session.status]);
+
   const displayableMessages = useMemo(() => {
-    return messages.filter((message, index) => {
+    const filtered = messages.filter((message, index) => {
       if (message.isMeta && !message.leafUuid && !message.summary) return false;
 
       if (message.type === "user" && message.message) {
@@ -328,6 +380,9 @@ export function SessionOutputViewer({ session, onClose, className }: SessionOutp
       }
       return true;
     });
+    
+    console.log(`SessionOutputViewer: Displayable messages: ${filtered.length} out of ${messages.length} total messages`);
+    return filtered;
   }, [messages]);
 
   return (

@@ -191,8 +191,12 @@ export function OutputCacheProvider({ children }: OutputCacheProviderProps) {
   // Auto-start polling when provider mounts
   useEffect(() => {
     startBackgroundPolling();
-    return () => stopBackgroundPolling();
-  }, [startBackgroundPolling, stopBackgroundPolling]);
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, []); // Empty deps - only run on mount/unmount
 
   const value: OutputCacheContextType = {
     getCachedOutput,

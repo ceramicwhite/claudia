@@ -247,7 +247,24 @@ pub async fn read_session_jsonl(session_id: &str, project_path: &str) -> Result<
     let project_dir = claude_dir.join(&encoded_project);
     let session_file = project_dir.join(format!("{}.jsonl", session_id));
 
+    info!("Looking for JSONL file at: {}", session_file.display());
+
     if !session_file.exists() {
+        // Check if there might be a resumed session file pattern
+        info!("Primary JSONL file not found, checking for alternatives...");
+        
+        // List all files in the directory
+        if let Ok(entries) = std::fs::read_dir(&project_dir) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.extension().and_then(|s| s.to_str()) == Some("jsonl") {
+                        info!("Found JSONL file: {}", path.display());
+                    }
+                }
+            }
+        }
+        
         return Err(format!(
             "Session file not found: {}",
             session_file.display()
@@ -255,12 +272,77 @@ pub async fn read_session_jsonl(session_id: &str, project_path: &str) -> Result<
     }
 
     match tokio::fs::read_to_string(&session_file).await {
-        Ok(content) => Ok(content),
+        Ok(content) => {
+            info!("Read JSONL file successfully, size: {} bytes", content.len());
+            Ok(content)
+        },
         Err(e) => Err(format!("Failed to read session file: {}", e)),
     }
 }
 
-/// Get agent run with real-time metrics
+/// Debug helper to check JSONL file status
+#[tauri::command]
+pub async fn debug_jsonl_status(
+    db: State<'_, AgentDb>,
+    run_id: i64,
+) -> Result<serde_json::Value, String> {
+    let run = get_agent_run(db, run_id).await?;
+    
+    let claude_dir = dirs::home_dir()
+        .ok_or("Failed to get home directory")?
+        .join(".claude")
+        .join("projects");
+    
+    let encoded_project = run.project_path.replace('/', "-");
+    let project_dir = claude_dir.join(&encoded_project);
+    let session_file = project_dir.join(format!("{}.jsonl", run.session_id));
+    
+    let mut result = serde_json::json!({
+        "run_id": run_id,
+        "session_id": run.session_id,
+        "parent_run_id": run.parent_run_id,
+        "status": run.status,
+        "jsonl_path": session_file.display().to_string(),
+        "jsonl_exists": session_file.exists(),
+    });
+    
+    if session_file.exists() {
+        if let Ok(metadata) = std::fs::metadata(&session_file) {
+            result["file_size"] = serde_json::json!(metadata.len());
+            if let Ok(modified) = metadata.modified() {
+                if let Ok(duration) = modified.elapsed() {
+                    result["last_modified_seconds_ago"] = serde_json::json!(duration.as_secs());
+                }
+            }
+        }
+        
+        if let Ok(content) = tokio::fs::read_to_string(&session_file).await {
+            let lines: Vec<&str> = content.lines().collect();
+            result["line_count"] = serde_json::json!(lines.len());
+            
+            // Check for usage limit message
+            let has_usage_limit = lines.iter().any(|line| {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
+                    if let Some(msg) = json.get("messageText").and_then(|m| m.as_str()) {
+                        return msg.contains("I've reached my usage limit");
+                    }
+                }
+                false
+            });
+            result["has_usage_limit_message"] = serde_json::json!(has_usage_limit);
+            
+            // Get last few lines
+            if lines.len() > 0 {
+                let last_lines: Vec<&str> = lines.iter().rev().take(5).rev().copied().collect();
+                result["last_5_lines"] = serde_json::json!(last_lines);
+            }
+        }
+    }
+    
+    Ok(result)
+}
+
+/// Get agent run with real-time metrics (without full output for performance)
 pub async fn get_agent_run_with_metrics(run: AgentRun) -> AgentRunWithMetrics {
     match read_session_jsonl(&run.session_id, &run.project_path).await {
         Ok(jsonl_content) => {
@@ -268,7 +350,7 @@ pub async fn get_agent_run_with_metrics(run: AgentRun) -> AgentRunWithMetrics {
             AgentRunWithMetrics {
                 run,
                 metrics: Some(metrics),
-                output: Some(jsonl_content),
+                output: None, // Don't include full output for performance
             }
         }
         Err(e) => {
@@ -1715,7 +1797,7 @@ pub async fn execute_agent(
     Ok(run_id)
 }
 
-/// List all currently running agent sessions
+/// List all agent sessions (including completed, failed, etc.)
 #[tauri::command]
 pub async fn list_running_sessions(db: State<'_, AgentDb>) -> Result<Vec<AgentRun>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1767,7 +1849,7 @@ pub async fn list_running_sessions(db: State<'_, AgentDb>) -> Result<Vec<AgentRu
     Ok(runs)
 }
 
-/// List all currently running agent sessions with metrics
+/// List all agent sessions with metrics (without full output for performance)
 #[tauri::command]
 pub async fn list_running_sessions_with_metrics(db: State<'_, AgentDb>) -> Result<Vec<AgentRunWithMetrics>, String> {
     let runs = list_running_sessions(db).await?;
@@ -1955,60 +2037,113 @@ pub async fn get_session_output(
         return Ok(String::new());
     }
 
-    // Read the JSONL content
-    match read_session_jsonl(&run.session_id, &run.project_path).await {
-        Ok(content) => Ok(content),
-        Err(_) => {
-            // For resumed runs, we should also check if there's output from parent runs
-            // This ensures we don't lose output when a session is resumed
-            let mut combined_output = String::new();
-            
-            // Collect all parent run IDs to avoid recursion
-            let mut current_parent_id = run.parent_run_id;
-            let mut parent_outputs = Vec::new();
-            
-            // Walk up the chain of parent runs
-            while let Some(parent_id) = current_parent_id {
-                let parent_run = match get_agent_run(db.clone(), parent_id).await {
-                    Ok(r) => r,
-                    Err(_) => break,
-                };
-                
-                // Try to get output for this parent
-                if !parent_run.session_id.is_empty() {
-                    // Try to read JSONL for parent
-                    if let Ok(parent_jsonl) = read_session_jsonl(&parent_run.session_id, &parent_run.project_path).await {
-                        parent_outputs.push(parent_jsonl);
-                        break; // Found JSONL, no need to go further
-                    }
-                }
-                
-                // Get live output for parent
-                if let Ok(parent_live) = registry.0.get_live_output(parent_id) {
-                    if !parent_live.is_empty() {
-                        parent_outputs.push(parent_live);
-                    }
-                }
-                
-                // Move to next parent
-                current_parent_id = parent_run.parent_run_id;
-            }
-            
-            // Add parent outputs in reverse order (oldest first)
-            for output in parent_outputs.into_iter().rev() {
-                combined_output.push_str(&output);
-                if !combined_output.is_empty() && !combined_output.ends_with('\n') {
-                    combined_output.push('\n');
+    // For resumed runs, Claude Code might not be appending to the JSONL file properly
+    // We need to combine the JSONL content with live output from the registry
+    
+    // If this is a recently completed resumed run, wait a bit for file to be fully written
+    if run.parent_run_id.is_some() && (run.status == "completed" || run.status == "paused_usage_limit") {
+        if let Some(completed_at) = &run.completed_at {
+            if let Ok(completed_time) = chrono::DateTime::parse_from_rfc3339(completed_at) {
+                let now = chrono::Utc::now();
+                let time_since_completion = now.signed_duration_since(completed_time);
+                if time_since_completion.num_seconds() < 5 {
+                    info!("Recently completed resumed run, waiting 1s for file to be fully written...");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 }
             }
-            
-            // Add current run's live output
-            let live_output = registry.0.get_live_output(run_id)?;
-            combined_output.push_str(&live_output);
-            
-            Ok(combined_output)
         }
     }
+    
+    // Read the JSONL file
+    let jsonl_content = match read_session_jsonl(&run.session_id, &run.project_path).await {
+        Ok(content) => {
+            info!("Read JSONL for run_id {}, session_id {}, content length: {}, parent_run_id: {:?}, status: {}", 
+                run_id, run.session_id, content.len(), run.parent_run_id, run.status);
+            
+            // Log first and last few lines for debugging
+            let lines: Vec<&str> = content.lines().collect();
+            if lines.len() > 0 {
+                info!("First line: {}", lines[0]);
+                if lines.len() > 1 {
+                    info!("Last line: {}", lines[lines.len() - 1]);
+                }
+                info!("Total lines: {}", lines.len());
+            }
+            content
+        },
+        Err(e) => {
+            info!("Failed to read JSONL for run_id {}: {}", run_id, e);
+            String::new()
+        }
+    };
+    
+    // For resumed runs, we need to check if there's live output that hasn't been written to JSONL
+    if run.parent_run_id.is_some() || run.status == "running" {
+        // Get live output from the registry
+        if let Ok(live_output) = registry.0.get_live_output(run_id) {
+            if !live_output.is_empty() {
+                info!("Found live output for run_id {}, length: {}", run_id, live_output.len());
+                
+                // If JSONL is empty or doesn't contain the live output, append it
+                if jsonl_content.is_empty() {
+                    return Ok(live_output);
+                } else if !jsonl_content.contains(&live_output) {
+                    // Combine JSONL content with live output
+                    let mut combined = jsonl_content.clone();
+                    if !combined.is_empty() && !combined.ends_with('\n') {
+                        combined.push('\n');
+                    }
+                    combined.push_str(&live_output);
+                    info!("Combined JSONL ({} bytes) with live output ({} bytes)", 
+                        jsonl_content.len(), live_output.len());
+                    return Ok(combined);
+                }
+            }
+        }
+        
+        // Also check if we need to get output from other resumed runs with the same session_id
+        // This is a workaround for Claude Code not properly appending to JSONL when using --resume
+        if run.parent_run_id.is_some() {
+            // Find all runs with the same session_id
+            let related_run_ids: Vec<i64> = {
+                let conn = db.0.lock().map_err(|e| e.to_string())?;
+                let mut stmt = conn.prepare(
+                    "SELECT id FROM agent_runs WHERE session_id = ?1 AND id != ?2 ORDER BY id"
+                ).map_err(|e| e.to_string())?;
+                
+                let ids: Vec<i64> = stmt.query_map(params![run.session_id, run_id], |row| row.get(0))
+                    .map_err(|e| e.to_string())?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|e| e.to_string())?;
+                ids
+            };
+            
+            // Collect live output from all related runs
+            let mut all_live_output = String::new();
+            for related_run_id in related_run_ids {
+                if let Ok(related_live_output) = registry.0.get_live_output(related_run_id) {
+                    if !related_live_output.is_empty() && !jsonl_content.contains(&related_live_output) {
+                        if !all_live_output.is_empty() {
+                            all_live_output.push('\n');
+                        }
+                        all_live_output.push_str(&related_live_output);
+                    }
+                }
+            }
+            
+            if !all_live_output.is_empty() {
+                info!("Found additional live output from related runs, length: {}", all_live_output.len());
+                let mut combined = jsonl_content;
+                if !combined.is_empty() && !combined.ends_with('\n') {
+                    combined.push('\n');
+                }
+                combined.push_str(&all_live_output);
+                return Ok(combined);
+            }
+        }
+    }
+    
+    Ok(jsonl_content)
 }
 
 /// Stream real-time session output by watching the JSONL file
@@ -2879,15 +3014,17 @@ pub async fn resume_agent(
             String::new()
         };
 
-        // We assume success if no usage limit error was found
-        let has_usage_limit_error = parse_usage_limit_error(&final_output).is_some();
+        // For resumed runs, we need to check if we hit a NEW usage limit
+        // The previous usage limit was already handled, so we only care about new ones
+        let has_new_usage_limit_error = parse_usage_limit_error(&final_output).is_some();
 
         // Update the database based on output
         if let Ok(conn) = Connection::open(&db_path) {
-            let status = if has_usage_limit_error {
+            let status = if has_new_usage_limit_error {
+                // Hit usage limit again during the resumed run
                 "paused_usage_limit"
             } else {
-                // Without explicit exit status, we assume completed if monitoring ended naturally
+                // Resumed run completed successfully
                 "completed"
             };
 
@@ -2895,10 +3032,12 @@ pub async fn resume_agent(
                 "UPDATE agent_runs SET status = ?1, completed_at = CURRENT_TIMESTAMP WHERE id = ?2",
                 params![status, new_run_id],
             );
+            
+            info!("Updated resumed run {} status to: {}", new_run_id, status);
         }
 
         // Emit completion event with run_id for isolation
-        let success = !has_usage_limit_error;
+        let success = !has_new_usage_limit_error;
         let _ = app_clone.emit(&format!("agent-complete:{}", new_run_id), success);
         
         info!("✅ Monitoring task completed for agent: {}", agent_name_for_monitor);
